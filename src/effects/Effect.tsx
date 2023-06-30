@@ -469,9 +469,9 @@ float maskBox(vec2 _st, vec2 _size, float _smoothEdges){
     return uv.x*uv.y;
 }
 
-vec3 draw(vec2 uv,in sampler2D tex) {
+vec4 draw(vec2 uv,in sampler2D tex) {
     // return texture(tex,vec2(1.- uv.x,uv.y)).rgb;   
-    return textureLod(tex,vec2(1.- uv.x,uv.y),8.).rgb;   
+    return textureLod(tex,vec2(uv.x,1. - uv.y),8.);   
 }
 
 float grid(float var, float size) {
@@ -483,12 +483,12 @@ float blurRand(vec2 co){
 }
 
 // *** the 'repeats' affect the performance
-vec3 blurredImage( in float roughness,in vec2 uv , in sampler2D tex)
+vec4 blurredImage( in float roughness,in vec2 uv , in sampler2D tex)
 {
     
     float bluramount = 0.2 * roughness;
     //float dists = 5.;
-    vec3 blurred_image = vec3(0.);
+    vec4 blurred_image = vec4(0.);
     #define repeats 30.
     for (float i = 0.; i < repeats; i++) { 
         //Older:
@@ -507,7 +507,7 @@ vec3 blurredImage( in float roughness,in vec2 uv , in sampler2D tex)
 }
 
 
-vec3 filterBorderRegion(in float roughness,in vec2 uv,in sampler2D tex){
+vec4 filterBorderRegion(in float roughness,in vec2 uv,in sampler2D tex){
     // this is useless now
 	float scale = 1.;
     float error = 0.4; //0.45
@@ -521,20 +521,18 @@ vec3 filterBorderRegion(in float roughness,in vec2 uv,in sampler2D tex){
     vec4 ClearCol;
     vec4 BlurCol;
     
-    BlurCol.rgb = blurredImage(2.,uv,tex);
+    BlurCol = blurredImage(2.,uv,tex);
 	if(UVC.x < 1. && UVC.x > 0. && UVC.y > 0. && UVC.y < 1.){
-        ClearCol.rgb = blurredImage(min(2.,roughness),UVC,tex);
+        ClearCol = blurredImage(min(2.,roughness),UVC,tex);
     }
 	//ClearCol.rgb = blurredImage(roughness,UVC,tex);
 	float boxMask = maskBox(UVC,vec2(scale+0.),error);
     BlurCol.rgb = mix(BlurCol.rgb, ClearCol.rgb, boxMask);
-    return BlurCol.rgb;
+    return BlurCol;
     
-    // # Method 2
-	//return blurredImage(min(2.,roughness),uv,tex).rgb;
 }
 
-vec3 FetchDiffuseFilteredTexture(float roughness,vec3 L[5],vec3 vLooupVector,sampler2D tex)
+vec4 FetchDiffuseFilteredTexture(float roughness,vec3 L[5],vec3 vLooupVector,sampler2D tex)
 {
 	vec3 V1 = L[1] - L[0];
 	vec3 V2 = L[3] - L[0];
@@ -553,32 +551,155 @@ vec3 FetchDiffuseFilteredTexture(float roughness,vec3 L[5],vec3 vLooupVector,sam
 	UV.y = dot(V2_, P) / dot(V2_, V2_);
 	UV.x = dot(V1, P) * inv_dot_V1_V1 - dot_V1_V2 * inv_dot_V1_V1 * UV.y;
 
-	// float scale = 1.;
-    // float error = 0.45;
-    // // Convert uv range to -1 to 1
-    // vec2 UVC = UV * 2.0 - 1.0;
-    // UVC *= (1. * 0.5 + 0.5) * (1. + (1. - scale));
-    // // Convert back to 0 to 1 range
-    // UVC = UVC * 0.5 + 0.5;
-
-    // vec4 ClearCol;
-    // vec4 BlurCol;
-    
-    // BlurCol.rgb = blurredImage(2.,UV,tex);
-	// if(UVC.x < 1. && UVC.x > 0. && UVC.y > 0. && UVC.y < 1.){
-    //     ClearCol.rgb = blurredImage(min(2.,roughness),UVC,tex);
-    // }
-	// //ClearCol.rgb = blurredImage(roughness,UVC,tex);
-	// float boxMask = maskBox(UVC,vec2(scale+0.),error);
-    // BlurCol.rgb = mix(BlurCol.rgb, ClearCol.rgb, boxMask);
-
-    // to delete border light even the canvas is dark
-    // UV -= .5;
-    // UV /= 1.1;
-    // UV += .5;
 
 	return filterBorderRegion(roughness,UV,tex);
 }
+
+
+mat3 caculatedMInv(float roughness,vec3 N,vec3 V,in sampler2D lut_tex){
+
+    //const float PI = 3.1415926;
+    const float LUTSIZE  = 64.0;
+    const float MATRIX_PARAM_OFFSET = 64.0;
+
+    float theta = acos(dot(N, V));
+    
+    vec2 uv = vec2(roughness, theta/(0.5*PI)) * float(LUTSIZE-1.);
+    uv += vec2(0.5 );
+    
+    vec2 LUT_RES = vec2(64.);
+    vec4 params = texture(lut_tex, (uv+vec2(MATRIX_PARAM_OFFSET, 0.0))/LUT_RES);
+    
+    mat3 Minv = mat3(
+        vec3(  1,        0,      params.y),
+        vec3(  0,     params.z,   0),
+        vec3(params.w,   0,      params.x)
+    );
+    
+    return Minv;
+}
+
+
+vec3 mul(mat3 m, vec3 v)
+{
+    return m * v;
+}
+
+mat3 mul(mat3 m1, mat3 m2)
+{
+    return m1 * m2;
+}
+
+const float LUT_SIZE  = 64.0;
+const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
+const float LUT_BIAS  = 0.5/LUT_SIZE;
+#define clipless true
+
+vec3 LTC_Evaluate_SelfShadow(
+    vec3 N, vec3 V, vec3 P, mat3 Minv, vec3 points[4], bool twoSided, sampler2D tex)
+{
+    // construct orthonormal basis around N
+    vec3 T1, T2;
+    T1 = normalize(V - N*dot(V, N));
+    T2 = cross(N, T1);
+
+    // rotate area light in (T1, T2, N) basis
+    Minv = mul(Minv, transpose(mat3(T1, T2, N)));
+
+    // polygon (allocate 5 vertices for clipping)
+    vec3 L[5];
+    L[0] = mul(Minv, points[0] - P);
+    L[1] = mul(Minv, points[1] - P);
+    L[2] = mul(Minv, points[2] - P);
+    L[3] = mul(Minv, points[3] - P);
+
+    // integrate
+    float sum = 0.0;
+
+    if (clipless)
+    {
+        vec3 dir = points[0].xyz - P;
+        vec3 lightNormal = cross(points[1] - points[0], points[3] - points[0]);
+        bool behind = (dot(dir, lightNormal) < 0.0);
+
+        L[0] = normalize(L[0]);
+        L[1] = normalize(L[1]);
+        L[2] = normalize(L[2]);
+        L[3] = normalize(L[3]);
+
+        vec3 vsum = vec3(0.0);
+
+        vsum += IntegrateEdgeVec(L[0], L[1]);
+        vsum += IntegrateEdgeVec(L[1], L[2]);
+        vsum += IntegrateEdgeVec(L[2], L[3]);
+        vsum += IntegrateEdgeVec(L[3], L[0]);
+
+        float len = length(vsum);
+        float z = vsum.z/len;
+
+        if (behind)
+            z = -z;
+
+        vec2 uv = vec2(z*0.5 + 0.5, len);
+        uv = uv*LUT_SCALE + LUT_BIAS;
+
+        float scale = texture(ltc_2, uv).w;
+
+        sum = len*scale;
+
+        if (behind && !twoSided)
+            sum = 0.0;
+    }
+    else
+    {
+        int n;
+        ClipQuadToHorizon(L, n);
+
+        if (n == 0)
+            return vec3(0, 0, 0);
+        // project onto sphere
+        L[0] = normalize(L[0]);
+        L[1] = normalize(L[1]);
+        L[2] = normalize(L[2]);
+        L[3] = normalize(L[3]);
+        L[4] = normalize(L[4]);
+
+        // integrate
+        sum += IntegrateEdge(L[0], L[1]);
+        sum += IntegrateEdge(L[1], L[2]);
+        sum += IntegrateEdge(L[2], L[3]);
+        if (n >= 4)
+            sum += IntegrateEdge(L[3], L[4]);
+        if (n == 5)
+            sum += IntegrateEdge(L[4], L[0]);
+
+        sum = twoSided ? abs(sum) : max(0.0, sum);
+    }
+
+    vec3 Lo_i = vec3(sum, sum, sum);
+    
+    vec3 PL[5];
+    PL[0] = mul(Minv, points[0] - P);
+    PL[1] = mul(Minv, points[1] - P);
+    PL[2] = mul(Minv, points[2] - P);
+    PL[3] = mul(Minv, points[3] - P);
+
+    // *** insert code here ***
+    vec3 e1 = normalize(PL[0] - PL[1]);
+    vec3 e2 = normalize(PL[2] - PL[1]);
+    vec3 N2 = cross(e1, e2); // Normal to light
+    vec3 V2 = N2 * dot(PL[1], N2); // Vector to some point in light rect
+    vec2 Tlight_shape = vec2(length(PL[0] - PL[1]), length(PL[2] - PL[1]));
+    V2 = V2 - PL[1];
+    float b = e1.y*e2.x - e1.x*e2.y + .1; // + .1 to remove artifacts
+	vec2 pLight = vec2((V2.y*e2.x - V2.x*e2.y)/b, (V2.x*e1.y - V2.y*e1.x)/b);
+   	pLight /= Tlight_shape;
+    //vec4 texCol = texture(img_tex, vec2(pLight.x,1.-pLight.y));
+    vec4 ref_col = FetchDiffuseFilteredTexture(roughness,PL,vec3(sum),tex);
+    return Lo_i*ref_col.rgb;
+}
+
+
 
 vec3 LTC_Evaluate_With_Texture_0(const in float roughness, const in vec3 N, const in vec3 V, const in vec3 P, const in mat3 mInv, const in vec3 rectCoords[ 4 ],in sampler2D tex,in sampler2D blur_tex) {
 
@@ -887,6 +1008,7 @@ const RECT_AREALIGHT_HACK = `
 uniform bool isLTCWithTexture;
 uniform sampler2D ltc_tex;
 uniform sampler2D ltc_blur_tex;
+uniform float external_roughness;
 
 #if NUM_RECT_AREA_LIGHTS > 0
 
@@ -974,40 +1096,40 @@ uniform sampler2D ltc_blur_tex;
            
             // *** METHOD III ***
 
-            // vec2 uv = LTC_Uv( normal, viewDir, roughness );
+            // // vec2 uv = LTC_Uv( normal, viewDir, roughness );
 
-            // vec4 t1 = texture2D( ltc_1, uv );
-            // vec4 t2 = texture2D( ltc_2, uv );
+            // // vec4 t1 = texture2D( ltc_1, uv );
+            // // vec4 t2 = texture2D( ltc_2, uv );
     
-            const float LUT_SIZE = 64.0;
-            const float LUT_SCALE = ( LUT_SIZE - 1.0 ) / LUT_SIZE;
-            const float LUT_BIAS = 0.5 / LUT_SIZE;
-            float MATRIX_PARAM_OFFSET = 16.0;
+            // const float LUT_SIZE = 64.0;
+            // const float LUT_SCALE = ( LUT_SIZE - 1.0 ) / LUT_SIZE;
+            // const float LUT_BIAS = 0.5 / LUT_SIZE;
+            // float MATRIX_PARAM_OFFSET = 16.0;
 
-            float dotNV = saturate( dot( normal, viewDir ) );
+            // float dotNV = saturate( dot( normal, viewDir ) );
         
-            // texture parameterized by sqrt( GGX alpha ) and sqrt( 1 - cos( theta ) )
-            vec2 uv_0 = vec2( roughness , sqrt( 1.0 - dotNV ) );
+            // // texture parameterized by sqrt( GGX alpha ) and sqrt( 1 - cos( theta ) )
+            // vec2 uv_0 = vec2( roughness , sqrt( 1.0 - dotNV ) );
         
-            uv_0 = uv_0 * LUT_SCALE + LUT_BIAS;
-            //uv_0 +=  vec2(MATRIX_PARAM_OFFSET,0)/vec2(LUT_SIZE,LUT_SIZE);
+            // uv_0 = uv_0 * LUT_SCALE + LUT_BIAS;
+            // //uv_0 +=  vec2(MATRIX_PARAM_OFFSET,0)/vec2(LUT_SIZE,LUT_SIZE);
             
 
-            vec4 t1 = texture2D( ltc_1, uv_0 );
-            vec4 t2 = texture2D( ltc_2, uv_0 );
+            // vec4 t1 = texture2D( ltc_1, uv_0 );
+            // vec4 t2 = texture2D( ltc_2, uv_0 );
 
-            // LTC Fresnel Approximation by Stephen Hill
-            // http://blog.selfshadow.com/publications/s2016-advances/s2016_ltc_fresnel.pdf
-            vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
+            // // LTC Fresnel Approximation by Stephen Hill
+            // // http://blog.selfshadow.com/publications/s2016-advances/s2016_ltc_fresnel.pdf
+            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
 
-            mat3 mInv = mat3(
-                vec3( t1.x, 0, t1.y ),
-                vec3(    0, 1,    0 ),
-                vec3( t1.z, 0, t1.w )
-            );
+            // mat3 mInv = mat3(
+            //     vec3( t1.x, 0, t1.y ),
+            //     vec3(    0, 1,    0 ),
+            //     vec3( t1.z, 0, t1.w )
+            // );
             
-            reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture_0( roughness, normal, viewDir, position, mInv, rectCoords , ltc_tex,ltc_blur_tex);
-            reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture_0( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex,ltc_blur_tex);
+            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture_0( roughness, normal, viewDir, position, mInv, rectCoords , ltc_tex,ltc_blur_tex);
+            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture_0( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex,ltc_blur_tex);
 
 
             // *** METHOD IV 
@@ -1031,6 +1153,44 @@ uniform sampler2D ltc_blur_tex;
             // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, Minv, rectCoords , ltc_tex);
             // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex);
            
+            // *** METHOD V ***
+
+            float ndotv = saturate(dot(normal, viewDir));
+            vec2 uv = vec2(roughness+external_roughness, sqrt(1.0 - ndotv)); //roughness
+            uv = uv*LUT_SCALE + LUT_BIAS;
+
+            vec4 t1 = texture(ltc_1, uv);
+            vec4 t2 = texture(ltc_2, uv);
+    
+            mat3 Minv = mat3(
+                vec3(t1.x, 0, t1.y),
+                vec3(  0,  1,    0),
+                vec3(t1.z, 0, t1.w)
+            );
+
+            //vec3 N, vec3 V, vec3 P, mat3 Minv, vec3 points[4], bool twoSided, sampler2D tex)
+
+            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
+            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, Minv, rectCoords , ltc_tex);
+            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex);
+            
+            vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
+            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_SelfShadow( normal, viewDir, position, Minv, rectCoords , false, ltc_tex);
+            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_SelfShadow( normal, viewDir, position, mat3( 1.0 ), rectCoords,false, ltc_tex);
+
+            vec3 spec = LTC_Evaluate_SelfShadow(normal, viewDir, position, Minv, rectCoords, false,ltc_tex);
+            //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y;
+            spec *= lightColor * fresnel;
+
+
+            vec3 diff = LTC_Evaluate_SelfShadow(normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex);
+            diff *= lightColor; //* material.diffuseColor
+
+            reflectedLight.directSpecular += spec;
+            reflectedLight.directDiffuse += diff;
+
+    
+
         }
         else{
 
@@ -1242,10 +1402,13 @@ ref: React.ForwardedRef<any>
     const { scene,gl,size,camera} = useThree();
 
     const rectAreaLightRef = useRef<any>();
+    const rectAreLightHelperRef = useRef<any>();
     const childrenRef = useRef<any>(null!);
 
     const image_Tex = useLoader(THREE.TextureLoader,'./light_test.png')
     const [threeTexture,setThreeTexture] = useState<THREE.Texture | null>(null);
+    const [copyVideo,setCopyVideo] = useState<boolean>(false);
+    const videoRef = useRef<any>(null);
 
     // # Material Ref
     const kawaseBlurMaterialRefA = useRef<THREE.ShaderMaterial | null>(null)
@@ -1290,13 +1453,14 @@ ref: React.ForwardedRef<any>
 
 
     const HackRectAreaLight = (tex:THREE.Texture) =>{
+   
         if(childrenRef.current){
             childrenRef.current.traverse((obj:any)=>{
                 if(obj.isMesh){
                     obj.material.onBeforeCompile = (shader:any) => {
                             shader.uniforms.isLTCWithTexture = { value: true };
                             shader.uniforms.ltc_tex = { value: tex };
-                            //
+                            shader.uniforms.external_roughness = {value:0.2}
                             shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_physical_pars_fragment>`,
                             RECT_AREALIGHT_PREFIX
                             + LTC_AREALIGHT_CORE
@@ -1308,23 +1472,92 @@ ref: React.ForwardedRef<any>
                 }
             })
         }
+        if(rectAreLightHelperRef.current){
+            rectAreLightHelperRef.current.onBeforeCompile = (shader:any) => {
+                shader.uniforms.vid_tex = {value:tex};
+
+                shader.vertexShader = shader.vertexShader.replace(`#include <common>`,
+                `
+                #include <common>
+                 varying vec2 vUv;
+                `
+                )
+
+                shader.vertexShader = shader.vertexShader.replace(`#include <fog_vertex>`,
+                `
+                #include <fog_vertex>
+                vUv = uv;
+                `
+                )
+
+                shader.fragmentShader = shader.fragmentShader.replace(`uniform float opacity;`,
+                `uniform float opacity;
+                 uniform sampler2D vid_tex;
+                 varying vec2 vUv;
+                `
+                )
+                shader.fragmentShader = shader.fragmentShader.replace(`#include <dithering_fragment>`,
+                    `#include <dithering_fragment>` +
+                    `
+                        gl_FragColor = texture2D(vid_tex,vUv);
+                    `
+                )
+            }
+        }
     }
 
     // *** Load Video Texture ***
-    useEffect(()=>{
-        const videoE = document.createElement('video');
-        videoE.src = 'https://localhost:8222/external/Video/capture_1.mp4';
-        videoE.crossOrigin = 'Anonymous'
-        videoE.loop = true
-        videoE.muted = true
-        videoE.load();
-        videoE.play();     
-        const vidTex = new THREE.VideoTexture( videoE );
+    const setupVideo = () =>{
+        videoRef.current = document.createElement('video');
+        videoRef.current.src = './test.mp4';
+        videoRef.current.crossOrigin = 'Anonymous'
+        videoRef.current.loop = true
+        videoRef.current.muted = true
+        videoRef.current.playsInline = true;
+        var playing =false;
+        var timeupdate = false;
+        videoRef.current.addEventListener(
+            "playing",
+            () => {
+              playing = true;
+              checkUpdate();
+            },
+            true
+        );
+        
+        videoRef.current.addEventListener(
+            "timeupdate",
+            () => {
+                timeupdate = true;
+                checkUpdate();
+            },
+            true
+        );
+
+        
+    
+        videoRef.current.src = './test.mp4';
+        videoRef.current.play();
+
+
+        function checkUpdate() {
+            if (playing && timeupdate) {
+                setCopyVideo(true)
+              }
+            
+        }
+
+        const vidTex = new THREE.VideoTexture( videoRef.current );
         vidTex.minFilter = THREE.NearestFilter;
         vidTex.magFilter = THREE.LinearFilter;
         vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
-        console.log(vidTex)
+        
         setThreeTexture(vidTex)
+       
+    }
+
+    useEffect(()=>{
+        setupVideo()
     },[])
 
     // *** Init LTC Texture ***
@@ -1338,61 +1571,58 @@ ref: React.ForwardedRef<any>
     },[rectAreaLightRef])
 
 
-    // *** Init Shader ***
-    useEffect(()=>{
-        HackRectAreaLight(image_Tex)
-
-    },[childrenRef])
-
     useFrame(() => {
 
-        if(threeTexture){
+            // *** Update Video Texture ***
+            var vidTex = new THREE.VideoTexture( videoRef.current );
+            vidTex.minFilter = THREE.NearestFilter;
+            vidTex.magFilter = THREE.LinearFilter;
+            vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
 
-            if(kawaseBlurMaterialRefA.current){
-                kawaseBlurMaterialRefA.current.uniforms.buff_tex.value = threeTexture
-                // Transformation Pass Buffer
-                gl.setRenderTarget(blurFBOA);
-                gl.render(DKDownSceneA,camera)
-                gl.setRenderTarget(null)
+            // if(kawaseBlurMaterialRefA.current){
+            //     kawaseBlurMaterialRefA.current.uniforms.buff_tex.value = threeTexture
+            //     // Transformation Pass Buffer
+            //     gl.setRenderTarget(blurFBOA);
+            //     gl.render(DKDownSceneA,camera)
+            //     gl.setRenderTarget(null)
                             
-            }
+            // }
 
-            if(kawaseBlurMaterialRefB.current){
-                kawaseBlurMaterialRefB.current.uniforms.buff_tex.value = blurFBOA.texture
-                // Transformation Pass Buffer
-                gl.setRenderTarget(blurFBOB);
-                gl.render(DKDownSceneB,camera)
-                gl.setRenderTarget(null)
-            }
+            // if(kawaseBlurMaterialRefB.current){
+            //     kawaseBlurMaterialRefB.current.uniforms.buff_tex.value = blurFBOA.texture
+            //     // Transformation Pass Buffer
+            //     gl.setRenderTarget(blurFBOB);
+            //     gl.render(DKDownSceneB,camera)
+            //     gl.setRenderTarget(null)
+            // }
 
-            if(kawaseBlurMaterialRefC.current){
-                kawaseBlurMaterialRefC.current.uniforms.buff_tex.value = blurFBOB.texture
-                // Transformation Pass Buffer
-                gl.setRenderTarget(blurFBOC);
-                gl.render(DKUpSceneA,camera)
-                gl.setRenderTarget(null)
-            }
+            // if(kawaseBlurMaterialRefC.current){
+            //     kawaseBlurMaterialRefC.current.uniforms.buff_tex.value = blurFBOB.texture
+            //     // Transformation Pass Buffer
+            //     gl.setRenderTarget(blurFBOC);
+            //     gl.render(DKUpSceneA,camera)
+            //     gl.setRenderTarget(null)
+            // }
 
-            if(kawaseBlurMaterialRefD.current){
-                kawaseBlurMaterialRefD.current.uniforms.buff_tex.value = blurFBOC.texture
-                // Transformation Pass Buffer
-                gl.setRenderTarget(blurFBOD);
-                gl.render(DKUpSceneB,camera)
-                gl.setRenderTarget(null)
-            }
+            // if(kawaseBlurMaterialRefD.current){
+            //     kawaseBlurMaterialRefD.current.uniforms.buff_tex.value = blurFBOC.texture
+            //     // Transformation Pass Buffer
+            //     gl.setRenderTarget(blurFBOD);
+            //     gl.render(DKUpSceneB,camera)
+            //     gl.setRenderTarget(null)
+            // }
 
             // if(finalMaterialRef.current){
             //     finalMaterialRef.current.uniforms.buff_tex.value = blurFBOD.texture
             // }
 
+            
+            HackRectAreaLight(vidTex)
 
-            HackRectAreaLight(threeTexture)
-
-        }
     },)
 
 
-    const {blurOffset,roughness} = useControls('blur',{
+    const {blurOffset,external_roughness} = useControls('blur',{
         blurOffset:{
             value:1.0,
             min:0.,
@@ -1414,7 +1644,7 @@ ref: React.ForwardedRef<any>
                 
             }
         },
-        roughness:{
+        external_roughness:{
             value:0.0,
             min:-10.,
             max:10.,
@@ -1426,8 +1656,6 @@ ref: React.ForwardedRef<any>
     //return null;
     return(
         <>
-            {threeTexture != null?
-            <>
             <rectAreaLight
                 ref={rectAreaLightRef}
                 rotation={rotation?rotation:[0,0,0]}
@@ -1438,7 +1666,7 @@ ref: React.ForwardedRef<any>
                 intensity={intensity?intensity:15}
             />
 
-            {
+            {/* {
                 createPortal(
                 <>
                     <Plane args={[2,2]}>
@@ -1525,7 +1753,7 @@ ref: React.ForwardedRef<any>
                     </Plane>
                 </>
                 ,DKUpSceneB)
-            }
+            } */}
 
             {/* <Plane 
                 args={[width?width:1,height?height:1]}
@@ -1553,18 +1781,13 @@ ref: React.ForwardedRef<any>
                         ></shaderMaterial>
             </Plane> */}
 
-            <Plane 
-                args={[width?width:4,height?height:4]}
-                position={position?position:[0,0,0]}
-                >
-                <meshBasicMaterial color={color?color:'white'} map={threeTexture} />
+            <Plane args={[width?width:4,height?height:4]} position={position?position:[0,0,0]}>
+                <meshBasicMaterial ref={rectAreLightHelperRef} color={color?color:'white'} />
             </Plane>
             
             <group ref={childrenRef}>
                 {children}
             </group>
-            </>:
-            <></>}
         </>
     )
   
@@ -1591,7 +1814,7 @@ const LTCTexturedLightDemo = () =>{
         <LTCAreaLightWithHelper 
             ref={ref} 
             position={[0, 3, -5]} 
-            rotation={[0,-Math.PI,0]} 
+            rotation={[0,0,0]} 
             // rotation={[0,-0,0]} 
             color="white" 
             isEnableHelper={false}    
