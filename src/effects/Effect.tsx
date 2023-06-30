@@ -46,7 +46,7 @@ ref: React.ForwardedRef<any>
     
     const blurBufferSize = 128.;
 
-    const videoUrl = './test.mp4';
+    const videoUrl = './test3.mp4';
     const imageUrl = './test.png';
 
     const isVideoTexture = true;
@@ -110,6 +110,7 @@ ref: React.ForwardedRef<any>
         // *** Hacking Children's Material
         if(childrenRef.current){
             childrenRef.current.traverse((obj:any)=>{
+         
                 if(obj.isMesh){
                     obj.material.onBeforeCompile = (shader:any) => {
                             shader.uniforms.isLTCWithTexture = { value: true };
@@ -406,7 +407,7 @@ const LTCTexturedLightDemo = () =>{
     const {floor_roughness,dragon_roughness} = useControls('Object Material',{
   
         floor_roughness:{
-            value:0.1,
+            value:0.5,
             min:0.0,
             max:10.0,
         },
