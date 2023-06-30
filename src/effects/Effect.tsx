@@ -608,7 +608,8 @@ vec3 LTC_Evaluate_SelfShadow(
     mat3 Minv, 
     vec3 points[4], 
     bool twoSided, 
-    sampler2D tex
+    sampler2D tex,
+    bool isTextured
 )
 {
     // construct orthonormal basis around N
@@ -693,26 +694,32 @@ vec3 LTC_Evaluate_SelfShadow(
     
 
     // *** add some textured Lighting ***
+    if(isTextured){
 
-    vec3 PL[5];
-    PL[0] = mul(Minv, points[0] - P);
-    PL[1] = mul(Minv, points[1] - P);
-    PL[2] = mul(Minv, points[2] - P);
-    PL[3] = mul(Minv, points[3] - P);
+        vec3 PL[5];
+        PL[0] = mul(Minv, points[0] - P);
+        PL[1] = mul(Minv, points[1] - P);
+        PL[2] = mul(Minv, points[2] - P);
+        PL[3] = mul(Minv, points[3] - P);
 
-    vec3 e1 = normalize(PL[0] - PL[1]);
-    vec3 e2 = normalize(PL[2] - PL[1]);
-    vec3 N2 = cross(e1, e2); // Normal to light
-    vec3 V2 = N2 * dot(PL[1], N2); // Vector to some point in light rect
-    vec2 Tlight_shape = vec2(length(PL[0] - PL[1]), length(PL[2] - PL[1]));
-    V2 = V2 - PL[1];
-    float b = e1.y*e2.x - e1.x*e2.y + .1; // + .1 to remove artifacts
-	vec2 pLight = vec2((V2.y*e2.x - V2.x*e2.y)/b, (V2.x*e1.y - V2.y*e1.x)/b);
-   	pLight /= Tlight_shape;
-    //vec4 texCol = texture(tex, vec2(pLight.x,pLight.y));
-    vec4 ref_col = FetchDiffuseFilteredTexture(m_roughness,PL,vec3(sum),tex);
-    
-    return Lo_i*ref_col.rgb;
+        vec3 e1 = normalize(PL[0] - PL[1]);
+        vec3 e2 = normalize(PL[2] - PL[1]);
+        vec3 N2 = cross(e1, e2); // Normal to light
+        vec3 V2 = N2 * dot(PL[1], N2); // Vector to some point in light rect
+        vec2 Tlight_shape = vec2(length(PL[0] - PL[1]), length(PL[2] - PL[1]));
+        V2 = V2 - PL[1];
+        float b = e1.y*e2.x - e1.x*e2.y + .1; // + .1 to remove artifacts
+        vec2 pLight = vec2((V2.y*e2.x - V2.x*e2.y)/b, (V2.x*e1.y - V2.y*e1.x)/b);
+        pLight /= Tlight_shape;
+        //vec4 texCol = texture(tex, vec2(pLight.x,pLight.y));
+        vec4 ref_col = FetchDiffuseFilteredTexture(m_roughness,PL,vec3(sum),tex);
+        
+        return Lo_i*ref_col.rgb;
+    }
+    else{
+        return Lo_i;
+    }
+    return Lo_i;
 }
 
 
@@ -883,10 +890,24 @@ uniform float external_roughness;
         if(isLTCWithTexture){
 
 
-            float m_roughness = roughness + normal.z + external_roughness;
-            float ndotv = saturate(dot(normal, viewDir));
-            vec2 uv = vec2(m_roughness, sqrt(1.0 - ndotv)); //roughness
-            uv = uv*LUT_SCALE + LUT_BIAS;
+            // float m_roughness = roughness + normal.z + external_roughness;
+            // float ndotv = saturate(dot(normal, viewDir));
+            // vec2 uv = vec2(m_roughness, sqrt(1.0 - ndotv)); //roughness
+            // uv = uv*LUT_SCALE + LUT_BIAS;
+
+            vec4 mapCol;
+            float m_roughness;
+
+            m_roughness = roughness + external_roughness;
+
+            #ifdef USE_MAP
+                mapCol = texture2D( map, vMapUv );
+                m_roughness = (1. - (mapCol.r + mapCol.g + mapCol.b)/3.) + normal.z + external_roughness;
+                m_roughness *= roughness;
+            #endif
+
+            
+            vec2 uv = LTC_Uv( normal, viewDir, m_roughness );
 
             vec4 t1 = texture(ltc_1, uv);
             vec4 t2 = texture(ltc_2, uv);
@@ -899,11 +920,11 @@ uniform float external_roughness;
 
             vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
 
-            vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, false,ltc_tex);
+            vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, false,ltc_tex,true);
             //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y; // lighterVersion
             spec *= lightColor * fresnel;
 
-            vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex);
+            vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex,true);
             diff *= lightColor * material.diffuseColor;
 
             reflectedLight.directSpecular += spec;
@@ -1130,7 +1151,7 @@ ref: React.ForwardedRef<any>
     const videoUrl = './test.mp4';
     const imageUrl = './test.png';
 
-    const isVideo = true;
+    const isVideoTexture = false;
 
     const image_Tex = useLoader(THREE.TextureLoader,imageUrl);
     const [copyVideo,setCopyVideo] = useState<boolean>(false);
@@ -1282,7 +1303,7 @@ ref: React.ForwardedRef<any>
 
     useEffect(()=>{
         if(rectAreaLightRef.current){
-            if(isVideo)
+            if(isVideoTexture)
                 setupVideo(videoUrl)
             else{
                 HackRectAreaLight(image_Tex)
@@ -1334,7 +1355,7 @@ ref: React.ForwardedRef<any>
             // }
 
             
-            if(isVideo){
+            if(isVideoTexture){
                 // *** Update Video Texture ***
                 var vidTex = new THREE.VideoTexture( videoRef.current );
                 vidTex.minFilter = THREE.NearestFilter;
@@ -1557,8 +1578,8 @@ const LTCTexturedLightDemo = () =>{
         // get elpiseTime
         const time =  performance.now() * 0.001;
         if(dragonRef.current){
-            dragonRef.current.position.x = 1. * Math.sin(time) ;
-            dragonRef.current.position.y = 1. + 1. * Math.cos(time);
+            //dragonRef.current.position.x = 1. * Math.sin(time) ;
+            //dragonRef.current.position.y = 1. + 1. * Math.cos(time);
         }
     })
 
@@ -1589,8 +1610,8 @@ const LTCTexturedLightDemo = () =>{
                     color="#ffffff" 
                     roughness={floor_roughness} 
                     map={floorMap}
-                    normalScale={[10,10]}
-                    normalMap={floorNormal}
+                    // normalScale={[10,10]}
+                    // normalMap={floorNormal}
                     metalness={0} 
                 />
             </Plane>
