@@ -331,6 +331,7 @@ const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
 const float LUT_BIAS  = 0.5/LUT_SIZE;
 #define clipless true
 #define blurItrRepeats 10.
+#define unBlurItrRepeats 2.
 
 // *** Linearly Transformed Cosines ***
 
@@ -498,21 +499,42 @@ float blurRand(vec2 co){
 vec4 blurredImage( in float m_roughness,in vec2 uv , in sampler2D tex)
 {
     
+    // **** blur solution 
+    // float blurAmount = 0.2 * m_roughness;
+    // //float dists = 5.;
+    // vec4 blurred_image = vec4(0.);
+    // for (float i = 0.; i < blurItrRepeats; i++) { 
+    //     //Older:
+    //     //vec2 q = vec2(cos(degrees((grid(i,dists)/blurItrRepeats)*360.)),sin(degrees((grid(i,dists)/blurItrRepeats)*360.))) * (1./(1.+mod(i,dists)));
+    //     vec2 q = vec2(cos(degrees((i/blurItrRepeats)*360.)),sin(degrees((i/blurItrRepeats)*360.))) *  (blurRand(vec2(i,uv.x+uv.y))+blurAmount); 
+    //     vec2 uv2 = uv+(q*blurAmount);
+    //     blurred_image += draw(uv2,tex)/2.;
+    //     //One more to hide the noise.
+    //     q = vec2(cos(degrees((i/blurItrRepeats)*360.)),sin(degrees((i/blurItrRepeats)*360.))) *  (blurRand(vec2(i+2.,uv.x+uv.y+24.))+blurAmount); 
+    //     uv2 = uv+(q*blurAmount);
+    //     blurred_image += draw(uv2,tex)/2.;
+    // }
+    // blurred_image /= blurItrRepeats;
+        
+    // return blurred_image;
+
+    // *** unBlur solution
+
     float blurAmount = 0.2 * m_roughness;
     //float dists = 5.;
     vec4 blurred_image = vec4(0.);
-    for (float i = 0.; i < blurItrRepeats; i++) { 
+    for (float i = 0.; i < unBlurItrRepeats; i++) { 
         //Older:
-        //vec2 q = vec2(cos(degrees((grid(i,dists)/blurItrRepeats)*360.)),sin(degrees((grid(i,dists)/blurItrRepeats)*360.))) * (1./(1.+mod(i,dists)));
-        vec2 q = vec2(cos(degrees((i/blurItrRepeats)*360.)),sin(degrees((i/blurItrRepeats)*360.))) *  (blurRand(vec2(i,uv.x+uv.y))+blurAmount); 
+        //vec2 q = vec2(cos(degrees((grid(i,dists)/unBlurItrRepeats)*360.)),sin(degrees((grid(i,dists)/unBlurItrRepeats)*360.))) * (1./(1.+mod(i,dists)));
+        vec2 q = vec2(cos(degrees((i/unBlurItrRepeats)*360.)),sin(degrees((i/unBlurItrRepeats)*360.))) *  (blurRand(vec2(i,uv.x+uv.y))+blurAmount); 
         vec2 uv2 = uv+(q*blurAmount);
         blurred_image += draw(uv2,tex)/2.;
         //One more to hide the noise.
-        q = vec2(cos(degrees((i/blurItrRepeats)*360.)),sin(degrees((i/blurItrRepeats)*360.))) *  (blurRand(vec2(i+2.,uv.x+uv.y+24.))+blurAmount); 
+        q = vec2(cos(degrees((i/unBlurItrRepeats)*360.)),sin(degrees((i/unBlurItrRepeats)*360.))) *  (blurRand(vec2(i+2.,uv.x+uv.y+24.))+blurAmount); 
         uv2 = uv+(q*blurAmount);
         blurred_image += draw(uv2,tex)/2.;
     }
-    blurred_image /= blurItrRepeats;
+    blurred_image /= unBlurItrRepeats;
         
     return blurred_image;
 }
@@ -922,7 +944,7 @@ uniform float external_roughness;
 
             vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, false,ltc_tex,true);
             //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y; // lighterVersion
-            spec *= lightColor * fresnel;
+            spec *= lightColor  * fresnel;
 
             vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex,true);
             diff *= lightColor * material.diffuseColor;
@@ -1078,12 +1100,14 @@ const prefix_frag = `
 const DOWNSAMPLE_BLUR=`
 uniform sampler2D buff_tex;
 uniform float blurOffset;
+uniform vec2 resolution;
 
 #define sampleScale (1. + blurOffset*0.1)
 #define pixelOffset 1.
 
 void main() {
-    vec2 uv = vUv*sampleScale;
+    vec2 uv = gl_FragCoord.xy/resolution.xy;
+    uv *= sampleScale;
     vec2 halfpixel = pixelOffset / ((gl_FragCoord.xy/vUv.xy) / sampleScale);
 
     vec4 sum;
@@ -1100,13 +1124,14 @@ void main() {
 const UPSAMPLE_BLUR = `
 uniform sampler2D buff_tex;
 uniform float blurOffset;
+uniform vec2 resolution;
 
 #define sampleScale (1. + blurOffset*0.1)
 #define pixelOffset 1.
 
 void main() {
-
-    vec2 uv = vUv/sampleScale;
+    vec2 uv = gl_FragCoord.xy/resolution.xy;
+    uv /= sampleScale;
     vec2 halfpixel = pixelOffset / ((gl_FragCoord.xy/vUv.xy) * sampleScale);
 
     vec4 sum;
@@ -1148,13 +1173,12 @@ ref: React.ForwardedRef<any>
     const rectAreLightHelperRef = useRef<any>();
     const childrenRef = useRef<any>(null!);
 
-    const videoUrl = './test.mp4';
+    const videoUrl = './test2.mp4';
     const imageUrl = './test.png';
 
     const isVideoTexture = false;
 
     const image_Tex = useLoader(THREE.TextureLoader,imageUrl);
-    const [copyVideo,setCopyVideo] = useState<boolean>(false);
     const videoRef = useRef<any>(null);
 
     // # Material Ref
@@ -1170,7 +1194,6 @@ ref: React.ForwardedRef<any>
             DKDownSceneB,
             DKUpSceneA,
             DKUpSceneB,
-
     ] = useMemo(()=>{
         return [
             new THREE.Scene(),
@@ -1190,16 +1213,16 @@ ref: React.ForwardedRef<any>
         blurFBOD
     ] = useMemo(()=>{
         return [
-            new THREE.WebGLRenderTarget(size.width/.2,size.height/2,FBOSettings),
-            new THREE.WebGLRenderTarget(size.width/.2,size.height/2,FBOSettings),
-            new THREE.WebGLRenderTarget(size.width/.2,size.height/2,FBOSettings),
-            new THREE.WebGLRenderTarget(size.width/.2,size.height/2,FBOSettings)
+            new THREE.WebGLRenderTarget(128.,128.,FBOSettings),
+            new THREE.WebGLRenderTarget(128.,128.,FBOSettings),
+            new THREE.WebGLRenderTarget(128.,128.,FBOSettings),
+            new THREE.WebGLRenderTarget(128.,128.,FBOSettings)
         ]
     },[])
 
 
 
-    const HackRectAreaLight = (tex:THREE.Texture) =>{
+    const HackRectAreaLight = (tex:THREE.Texture,blur_tex:THREE.Texture) =>{
    
         // *** Hacking Children's Material
         if(childrenRef.current){
@@ -1207,7 +1230,7 @@ ref: React.ForwardedRef<any>
                 if(obj.isMesh){
                     obj.material.onBeforeCompile = (shader:any) => {
                             shader.uniforms.isLTCWithTexture = { value: true };
-                            shader.uniforms.ltc_tex = { value: tex };
+                            shader.uniforms.ltc_tex = { value: blur_tex };
                             shader.uniforms.external_roughness = {value:0.}
                             shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_physical_pars_fragment>`,
                             RECT_AREALIGHT_PREFIX
@@ -1288,7 +1311,6 @@ ref: React.ForwardedRef<any>
         function checkUpdate() {
             if (playing && timeupdate) {
                 // * tik tok tik tok *
-                setCopyVideo(true)
               }
             
         }
@@ -1299,6 +1321,39 @@ ref: React.ForwardedRef<any>
         RectAreaLightUniformsLib.init();
     }
 
+    const DualKawaseBlurPass = (tex:THREE.Texture):THREE.Texture =>{
+        if(kawaseBlurMaterialRefA.current){
+            kawaseBlurMaterialRefA.current.uniforms.buff_tex.value = tex
+            gl.setRenderTarget(blurFBOA);
+            gl.render(DKDownSceneA,camera)
+            gl.setRenderTarget(null)
+                        
+        }
+
+        if(kawaseBlurMaterialRefB.current){
+            kawaseBlurMaterialRefB.current.uniforms.buff_tex.value = blurFBOA.texture
+            gl.setRenderTarget(blurFBOB);
+            gl.render(DKDownSceneB,camera)
+            gl.setRenderTarget(null)
+        }
+
+        if(kawaseBlurMaterialRefC.current){
+            kawaseBlurMaterialRefC.current.uniforms.buff_tex.value = blurFBOB.texture
+            gl.setRenderTarget(blurFBOC);
+            gl.render(DKUpSceneA,camera)
+            gl.setRenderTarget(null)
+        }
+
+        if(kawaseBlurMaterialRefD.current){
+            kawaseBlurMaterialRefD.current.uniforms.buff_tex.value = blurFBOC.texture
+            gl.setRenderTarget(blurFBOD);
+            gl.render(DKUpSceneB,camera)
+            gl.setRenderTarget(null)
+        }
+
+        return blurFBOD.texture;
+    }
+
     // *** Init LTC Texture ***
 
     useEffect(()=>{
@@ -1306,7 +1361,7 @@ ref: React.ForwardedRef<any>
             if(isVideoTexture)
                 setupVideo(videoUrl)
             else{
-                HackRectAreaLight(image_Tex)
+                HackRectAreaLight(image_Tex,DualKawaseBlurPass(image_Tex))
             }
             initLTCTexture();
         }
@@ -1317,43 +1372,7 @@ ref: React.ForwardedRef<any>
     useFrame(() => {
 
 
-            // if(kawaseBlurMaterialRefA.current){
-            //     kawaseBlurMaterialRefA.current.uniforms.buff_tex.value = threeTexture
-            //     // Transformation Pass Buffer
-            //     gl.setRenderTarget(blurFBOA);
-            //     gl.render(DKDownSceneA,camera)
-            //     gl.setRenderTarget(null)
-                            
-            // }
-
-            // if(kawaseBlurMaterialRefB.current){
-            //     kawaseBlurMaterialRefB.current.uniforms.buff_tex.value = blurFBOA.texture
-            //     // Transformation Pass Buffer
-            //     gl.setRenderTarget(blurFBOB);
-            //     gl.render(DKDownSceneB,camera)
-            //     gl.setRenderTarget(null)
-            // }
-
-            // if(kawaseBlurMaterialRefC.current){
-            //     kawaseBlurMaterialRefC.current.uniforms.buff_tex.value = blurFBOB.texture
-            //     // Transformation Pass Buffer
-            //     gl.setRenderTarget(blurFBOC);
-            //     gl.render(DKUpSceneA,camera)
-            //     gl.setRenderTarget(null)
-            // }
-
-            // if(kawaseBlurMaterialRefD.current){
-            //     kawaseBlurMaterialRefD.current.uniforms.buff_tex.value = blurFBOC.texture
-            //     // Transformation Pass Buffer
-            //     gl.setRenderTarget(blurFBOD);
-            //     gl.render(DKUpSceneB,camera)
-            //     gl.setRenderTarget(null)
-            // }
-
-            // if(finalMaterialRef.current){
-            //     finalMaterialRef.current.uniforms.buff_tex.value = blurFBOD.texture
-            // }
-
+        
             
             if(isVideoTexture){
                 // *** Update Video Texture ***
@@ -1362,57 +1381,28 @@ ref: React.ForwardedRef<any>
                 vidTex.magFilter = THREE.LinearFilter;
                 vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
 
-                HackRectAreaLight(vidTex)
+
+
+
+                HackRectAreaLight(vidTex,DualKawaseBlurPass(vidTex))
             }
+            else{
+
+            }
+
+ 
+
+
 
     },)
 
 
-    const {blurOffset,external_roughness} = useControls('blur',{
-        blurOffset:{
-            value:1.0,
-            min:0.,
-            max:10,
-            step:0.1,
-            onChange:(v:any)=>{
-                if(kawaseBlurMaterialRefA.current){
-                    kawaseBlurMaterialRefA.current.uniforms.blurOffset.value = v
-                }
-                if(kawaseBlurMaterialRefB.current){
-                    kawaseBlurMaterialRefB.current.uniforms.blurOffset.value = v
-                }
-                if(kawaseBlurMaterialRefC.current){
-                    kawaseBlurMaterialRefC.current.uniforms.blurOffset.value = v
-                }
-                if(kawaseBlurMaterialRefD.current){
-                    kawaseBlurMaterialRefD.current.uniforms.blurOffset.value = v
-                }
-                
-            }
-        },
-        external_roughness:{
-            value:0.0,
-            min:-10.,
-            max:10.,
-            step:0.01,
-        }
-
-    })
   
     //return null;
     return(
         <>
-            <rectAreaLight
-                ref={rectAreaLightRef}
-                rotation={rotation?rotation:[0,0,0]}
-                position={position?position:[0,0,0]}
-                width={width?width:4}
-                height={height?height:4}
-                color={color?color:'white'}
-                intensity={intensity?intensity:15}
-            />
 
-            {/* {
+            {
                 createPortal(
                 <>
                     <Plane args={[2,2]}>
@@ -1427,7 +1417,8 @@ ref: React.ForwardedRef<any>
                             }
                             uniforms={{
                                 buff_tex:{value:null},
-                                blurOffset:{value:blurOffset}
+                                blurOffset:{value:0.},
+                                resolution:{value:[128.,128.]}
                             }}
                         ></shaderMaterial>
                     </Plane>
@@ -1449,7 +1440,8 @@ ref: React.ForwardedRef<any>
                             }
                             uniforms={{
                                 buff_tex:{value:null},
-                                blurOffset:{value:blurOffset}
+                                blurOffset:{value:0.},
+                                resolution:{value:[128.,128.]}
                             }}
                         ></shaderMaterial>
                     </Plane>
@@ -1471,7 +1463,8 @@ ref: React.ForwardedRef<any>
                             }
                             uniforms={{
                                 buff_tex:{value:null},
-                                blurOffset:{value:blurOffset}
+                                blurOffset:{value:0.},
+                                resolution:{value:[128.,128.]}
                             }}
                         ></shaderMaterial>
                     </Plane>
@@ -1493,39 +1486,24 @@ ref: React.ForwardedRef<any>
                             }
                             uniforms={{
                                 buff_tex:{value:null},
-                                blurOffset:{value:blurOffset}
+                                blurOffset:{value:0.},
+                                resolution:{value:[128.,128.]}
                             }}
                         ></shaderMaterial>
                     </Plane>
                 </>
                 ,DKUpSceneB)
-            } */}
+            }
 
-            {/* <Plane 
-                args={[width?width:1,height?height:1]}
+            <rectAreaLight
+                ref={rectAreaLightRef}
+                rotation={rotation?rotation:[0,0,0]}
                 position={position?position:[0,0,0]}
-                >
-                        <shaderMaterial
-                            ref={finalMaterialRef}
-                            uniforms = {{
-                                buff_tex:{value:null},
-                            }}
-                            vertexShader={
-                                prefix_vertex+common_vertex_main
-                            }
-                            fragmentShader={
-                                prefix_frag
-                                + `
-                                uniform sampler2D buff_tex;
-                                void main(){
-                                    gl_FragColor = texture(buff_tex,vUv);
-                                }
-                                `
-                            }
-                            
-   
-                        ></shaderMaterial>
-            </Plane> */}
+                width={width?width:4}
+                height={height?height:4}
+                color={color?color:'white'}
+                intensity={intensity?intensity:15}
+            />
 
             <Plane args={[width?width:4,height?height:4]} position={position?position:[0,0,0]}>
                 <meshBasicMaterial ref={rectAreLightHelperRef} color={color?color:'white'} />
@@ -1554,12 +1532,12 @@ const LTCTexturedLightDemo = () =>{
         floor_roughness:{
             value:0.1,
             min:0.0,
-            max:10.0,
+            max:1.0,
         },
         dragon_roughness:{
             value:0.5,
             min:0.0,
-            max:10.0,
+            max:1.0,
             onChange:(v:any)=>{
             
                 if(dragonRef.current){
@@ -1578,16 +1556,14 @@ const LTCTexturedLightDemo = () =>{
         // get elpiseTime
         const time =  performance.now() * 0.001;
         if(dragonRef.current){
-            //dragonRef.current.position.x = 1. * Math.sin(time) ;
-            //dragonRef.current.position.y = 1. + 1. * Math.cos(time);
+            dragonRef.current.position.x = 1. * Math.sin(time) ;
+            dragonRef.current.position.y = 1. + 1. * Math.cos(time);
         }
     })
 
     const floorMap = useLoader(THREE.TextureLoader,'./floor2.jpg');
-    const floorNormal = useLoader(THREE.TextureLoader,'./floor_normal.png');
     floorMap.repeat.set(20,20);
-    floorNormal.repeat.set(20,20);
-    floorNormal.wrapS = floorNormal.wrapT = floorMap.wrapS = floorMap.wrapT = THREE.RepeatWrapping;
+    floorMap.wrapS = floorMap.wrapT = THREE.RepeatWrapping;
     
 
     return(
