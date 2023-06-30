@@ -11,6 +11,7 @@ import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLigh
 import * as React from "react";
 import mergeRefs from 'react-merge-refs';
 
+// *** The original lights glsl code, from three.js
 const RECT_AREALIGHT_PREFIX = `
 struct PhysicalMaterial {
 	vec3 diffuseColor;
@@ -318,10 +319,44 @@ vec3 LTC_Evaluate( const in vec3 N, const in vec3 V, const in vec3 P, const in m
 
 // End Rect Area Light
 `
+// *** Mainly from selfshadow's 'ltc_code' repo
+// *** https://github.com/selfshadow/ltc_code/blob/master/webgl/shaders/ltc/ltc_quad.fs
 
 const LTC_AREALIGHT_CORE=`
 
 // *************** START LTC AREA LIGHT ***************
+
+const float LUT_SIZE  = 64.0;
+const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
+const float LUT_BIAS  = 0.5/LUT_SIZE;
+#define clipless true
+#define blurItrRepeats 10.
+
+// *** Linearly Transformed Cosines ***
+
+vec3 IntegrateEdgeVec(vec3 v1, vec3 v2)
+{
+    float x = dot(v1, v2);
+    float y = abs(x);
+
+    float a = 0.8543985 + (0.4965155 + 0.0145206*y)*y;
+    float b = 3.4175940 + (4.1616724 + y)*y;
+    float v = a / b;
+
+    float theta_sintheta = (x > 0.0) ? v : 0.5*inversesqrt(max(1.0 - x*x, 1e-7)) - v;
+
+    return cross(v1, v2)*theta_sintheta;
+}
+
+float IntegrateEdge(vec3 v1, vec3 v2)
+{
+    float cosTheta = dot(v1, v2);
+    float theta = acos(cosTheta);    
+    float res = cross(v1, v2).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
+
+	return res;
+}
+
 
 void ClipQuadToHorizon(inout vec3 L[5], out int n)
 {
@@ -434,28 +469,6 @@ void ClipQuadToHorizon(inout vec3 L[5], out int n)
         L[4] = L[0];
 }
 
-float IntegrateEdge(vec3 v1, vec3 v2)
-{
-    float cosTheta = dot(v1, v2);
-    float theta = acos(cosTheta);    
-    float res = cross(v1, v2).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
-
-	return res;
-}
-
-vec3 IntegrateEdgeVec(vec3 v1, vec3 v2)
-{
-    float x = dot(v1, v2);
-    float y = abs(x);
-
-    float a = 0.8543985 + (0.4965155 + 0.0145206*y)*y;
-    float b = 3.4175940 + (4.1616724 + y)*y;
-    float v = a / b;
-
-    float theta_sintheta = (x > 0.0) ? v : 0.5*inversesqrt(max(1.0 - x*x, 1e-7)) - v;
-
-    return cross(v1, v2)*theta_sintheta;
-}
 
 // ******* Filtered Border Region 
 // https://advances.realtimerendering.com/s2016/s2016_ltc_rnd.pdf p-104  -> filtered border region
@@ -470,8 +483,8 @@ float maskBox(vec2 _st, vec2 _size, float _smoothEdges){
 }
 
 vec4 draw(vec2 uv,in sampler2D tex) {
-    // return texture(tex,vec2(1.- uv.x,uv.y)).rgb;   
-    return textureLod(tex,vec2(uv.x,1. - uv.y),8.);   
+    //return texture(tex,vec2(1.- uv.x,uv.y));   
+    return textureLod(tex,vec2(1. - uv.x,uv.y),4.);   
 }
 
 float grid(float var, float size) {
@@ -482,32 +495,30 @@ float blurRand(vec2 co){
     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
 }
 
-// *** the 'repeats' affect the performance
-vec4 blurredImage( in float roughness,in vec2 uv , in sampler2D tex)
+vec4 blurredImage( in float m_roughness,in vec2 uv , in sampler2D tex)
 {
     
-    float bluramount = 0.2 * roughness;
+    float blurAmount = 0.2 * m_roughness;
     //float dists = 5.;
     vec4 blurred_image = vec4(0.);
-    #define repeats 30.
-    for (float i = 0.; i < repeats; i++) { 
+    for (float i = 0.; i < blurItrRepeats; i++) { 
         //Older:
-        //vec2 q = vec2(cos(degrees((grid(i,dists)/repeats)*360.)),sin(degrees((grid(i,dists)/repeats)*360.))) * (1./(1.+mod(i,dists)));
-        vec2 q = vec2(cos(degrees((i/repeats)*360.)),sin(degrees((i/repeats)*360.))) *  (blurRand(vec2(i,uv.x+uv.y))+bluramount); 
-        vec2 uv2 = uv+(q*bluramount);
+        //vec2 q = vec2(cos(degrees((grid(i,dists)/blurItrRepeats)*360.)),sin(degrees((grid(i,dists)/blurItrRepeats)*360.))) * (1./(1.+mod(i,dists)));
+        vec2 q = vec2(cos(degrees((i/blurItrRepeats)*360.)),sin(degrees((i/blurItrRepeats)*360.))) *  (blurRand(vec2(i,uv.x+uv.y))+blurAmount); 
+        vec2 uv2 = uv+(q*blurAmount);
         blurred_image += draw(uv2,tex)/2.;
         //One more to hide the noise.
-        q = vec2(cos(degrees((i/repeats)*360.)),sin(degrees((i/repeats)*360.))) *  (blurRand(vec2(i+2.,uv.x+uv.y+24.))+bluramount); 
-        uv2 = uv+(q*bluramount);
+        q = vec2(cos(degrees((i/blurItrRepeats)*360.)),sin(degrees((i/blurItrRepeats)*360.))) *  (blurRand(vec2(i+2.,uv.x+uv.y+24.))+blurAmount); 
+        uv2 = uv+(q*blurAmount);
         blurred_image += draw(uv2,tex)/2.;
     }
-    blurred_image /= repeats;
+    blurred_image /= blurItrRepeats;
         
     return blurred_image;
 }
 
 
-vec4 filterBorderRegion(in float roughness,in vec2 uv,in sampler2D tex){
+vec4 filterBorderRegion(in float m_roughness,in vec2 uv,in sampler2D tex){
     // this is useless now
 	float scale = 1.;
     float error = 0.4; //0.45
@@ -523,16 +534,16 @@ vec4 filterBorderRegion(in float roughness,in vec2 uv,in sampler2D tex){
     
     BlurCol = blurredImage(2.,uv,tex);
 	if(UVC.x < 1. && UVC.x > 0. && UVC.y > 0. && UVC.y < 1.){
-        ClearCol = blurredImage(min(2.,roughness),UVC,tex);
+        ClearCol = blurredImage(min(2.,m_roughness),UVC,tex);
     }
-	//ClearCol.rgb = blurredImage(roughness,UVC,tex);
+	//ClearCol.rgb = blurredImage(m_roughness,UVC,tex);
 	float boxMask = maskBox(UVC,vec2(scale+0.),error);
     BlurCol.rgb = mix(BlurCol.rgb, ClearCol.rgb, boxMask);
     return BlurCol;
     
 }
 
-vec4 FetchDiffuseFilteredTexture(float roughness,vec3 L[5],vec3 vLooupVector,sampler2D tex)
+vec4 FetchDiffuseFilteredTexture(float m_roughness,vec3 L[5],vec3 vLooupVector,sampler2D tex)
 {
 	vec3 V1 = L[1] - L[0];
 	vec3 V2 = L[3] - L[0];
@@ -551,8 +562,7 @@ vec4 FetchDiffuseFilteredTexture(float roughness,vec3 L[5],vec3 vLooupVector,sam
 	UV.y = dot(V2_, P) / dot(V2_, V2_);
 	UV.x = dot(V1, P) * inv_dot_V1_V1 - dot_V1_V2 * inv_dot_V1_V1 * UV.y;
 
-
-	return filterBorderRegion(roughness,UV,tex);
+	return filterBorderRegion(m_roughness,UV,tex);
 }
 
 
@@ -590,13 +600,16 @@ mat3 mul(mat3 m1, mat3 m2)
     return m1 * m2;
 }
 
-const float LUT_SIZE  = 64.0;
-const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
-const float LUT_BIAS  = 0.5/LUT_SIZE;
-#define clipless true
-
 vec3 LTC_Evaluate_SelfShadow(
-    vec3 N, vec3 V, vec3 P, mat3 Minv, vec3 points[4], bool twoSided, sampler2D tex)
+    float m_roughness,
+    vec3 N, 
+    vec3 V, 
+    vec3 P, 
+    mat3 Minv, 
+    vec3 points[4], 
+    bool twoSided, 
+    sampler2D tex
+)
 {
     // construct orthonormal basis around N
     vec3 T1, T2;
@@ -678,13 +691,15 @@ vec3 LTC_Evaluate_SelfShadow(
 
     vec3 Lo_i = vec3(sum, sum, sum);
     
+
+    // *** add some textured Lighting ***
+
     vec3 PL[5];
     PL[0] = mul(Minv, points[0] - P);
     PL[1] = mul(Minv, points[1] - P);
     PL[2] = mul(Minv, points[2] - P);
     PL[3] = mul(Minv, points[3] - P);
 
-    // *** insert code here ***
     vec3 e1 = normalize(PL[0] - PL[1]);
     vec3 e2 = normalize(PL[2] - PL[1]);
     vec3 N2 = cross(e1, e2); // Normal to light
@@ -694,186 +709,18 @@ vec3 LTC_Evaluate_SelfShadow(
     float b = e1.y*e2.x - e1.x*e2.y + .1; // + .1 to remove artifacts
 	vec2 pLight = vec2((V2.y*e2.x - V2.x*e2.y)/b, (V2.x*e1.y - V2.y*e1.x)/b);
    	pLight /= Tlight_shape;
-    //vec4 texCol = texture(img_tex, vec2(pLight.x,1.-pLight.y));
-    vec4 ref_col = FetchDiffuseFilteredTexture(roughness,PL,vec3(sum),tex);
+    //vec4 texCol = texture(tex, vec2(pLight.x,pLight.y));
+    vec4 ref_col = FetchDiffuseFilteredTexture(m_roughness,PL,vec3(sum),tex);
+    
     return Lo_i*ref_col.rgb;
 }
 
 
-
-vec3 LTC_Evaluate_With_Texture_0(const in float roughness, const in vec3 N, const in vec3 V, const in vec3 P, const in mat3 mInv, const in vec3 rectCoords[ 4 ],in sampler2D tex,in sampler2D blur_tex) {
-
-	// bail if point is on back side of plane of light
-	// assumes ccw winding order of light vertices
-	vec3 v1 = rectCoords[ 1 ] - rectCoords[ 0 ];
-	vec3 v2 = rectCoords[ 3 ] - rectCoords[ 0 ];
-	vec3 lightNormal = cross( v1, v2 );
-
-	if( dot( lightNormal, P - rectCoords[ 0 ] ) < 0.0 ) return vec3( 0.0 );
-
-	// construct orthonormal basis around N
-	vec3 T1, T2;
-	T1 = normalize( V - N * dot( V, N ) );
-	T2 = - cross( N, T1 ); // negated from paper; possibly due to a different handedness of world coordinate system
-
-	// compute transform
-	mat3 mat = mInv * transposeMat3( mat3( T1, T2, N ) );
-
-	// transform rect
-	vec3 coords[ 4 ];
-	coords[ 0 ] = mat * ( rectCoords[ 0 ] - P );
-	coords[ 1 ] = mat * ( rectCoords[ 1 ] - P );
-	coords[ 2 ] = mat * ( rectCoords[ 2 ] - P );
-	coords[ 3 ] = mat * ( rectCoords[ 3 ] - P );
-
-	// project rect onto sphere
-    
-	coords[ 0 ] = normalize( coords[ 0 ] );
-	coords[ 1 ] = normalize( coords[ 1 ] );
-	coords[ 2 ] = normalize( coords[ 2 ] );
-	coords[ 3 ] = normalize( coords[ 3 ] );
-
-	// calculate vector form factor
-	vec3 vectorFormFactor = vec3( 0.0 );
-	vectorFormFactor += LTC_EdgeVectorFormFactor( coords[ 0 ], coords[ 1 ] );
-	vectorFormFactor += LTC_EdgeVectorFormFactor( coords[ 1 ], coords[ 2 ] );
-	vectorFormFactor += LTC_EdgeVectorFormFactor( coords[ 2 ], coords[ 3 ] );
-	vectorFormFactor += LTC_EdgeVectorFormFactor( coords[ 3 ], coords[ 0 ] );
-
-	// adjust for horizon clipping
-	float result = LTC_ClippedSphereFormFactor( vectorFormFactor );
-
-    result = max(0.,result);
-
-    // Calculate color
-
-    vec3 L[5];
-	L[0] = mat * ( rectCoords[0] - P );
-	L[1] = mat * ( rectCoords[1] - P );
-	L[2] = mat * ( rectCoords[2] - P );
-	L[3] = mat * ( rectCoords[3] - P );
-
-    vec3 e1 = normalize(L[0] - L[1]);
-    vec3 e2 = normalize(L[2] - L[1]);
-    vec3 N2 = cross(e1, e2); // Normal to light
-    vec3 V2 = N2 * dot(L[1], N2); // Vector to some point in light rect
-    vec2 Tlight_shape = vec2(length(L[0] - L[1]), length(L[2] - L[1]));
-    V2 = V2 - L[1];
-    float b = e1.y*e2.x - e1.x*e2.y + .1; // + .1 to remove artifacts
-	vec2 pLight = vec2((V2.y*e2.x - V2.x*e2.y)/b, (V2.x*e1.y - V2.y*e1.x)/b);
-   	pLight /= Tlight_shape;
-    // pLight -= .5;
-    // pLight /= 2.5;
-    // pLight += .5;
-    
-    vec3 ref_col;
-    
-    ref_col = texture(tex, pLight).xyz;
-
-    //ref_col = filterBorderRegion(roughness + 2.,vec2(saturate(pLight.x),saturate(pLight.y)),tex);
-
-	//ref_col = FetchDiffuseFilteredTexture(roughness,L,vec3(result),tex);
-
-    //ref_col = textureLod(tex,pLight,4.).rgb;
-
-    vec3 Lo_i = vec3(result) * ref_col;
-
-    return Lo_i;
-
-
-}
-
-vec3 LTC_Evaluate_With_Texture( 
-    const in float roughness,
-    const in vec3 N, 
-    const in vec3 V, 
-    const in vec3 P, 
-    const in mat3 Minv, 
-    const in vec3 points[ 4 ], 
-    in sampler2D tex) {
-	
-	// construct orthonormal basis around N
-	vec3 T1, T2;
-    T1 = normalize(V - N*dot(V, N));
-    T2 = cross(N, T1);
-    // rotate area light in (T1, T2, N) basis
-	mat3 mInv = Minv * transpose(mat3(T1, T2, N));
-	
-	vec3 L[5];
-    L[0] = mInv * (points[0] - P);
-    L[1] = mInv * (points[1] - P);
-    L[2] = mInv * (points[2] - P);
-	L[3] = mInv * (points[3] - P);
-
-	int n=0;
-    ClipQuadToHorizon(L, n);
-	
-	if (n == 0)
-		return vec3(0, 0, 0);
-
-	vec3 PL[5];
-	PL[0] = normalize(L[0]);
-	PL[1] = normalize(L[1]);
-	PL[2] = normalize(L[2]);
-	PL[3] = normalize(L[3]);
-	PL[4] = normalize(L[4]);
-
-
-    // *** Method I
-
-    // calculate vector form factor
-	vec3 vectorFormFactor = vec3( 0.0 );
-	vectorFormFactor += IntegrateEdgeVec( PL[ 0 ], PL[ 1 ] );
-	vectorFormFactor += IntegrateEdgeVec( PL[ 1 ], PL[ 2 ] );
-	vectorFormFactor += IntegrateEdgeVec( PL[ 2 ], PL[ 3 ] );
-	vectorFormFactor += IntegrateEdgeVec( PL[ 3 ], PL[ 0 ] );
-
-	// adjust for horizon clipping
-	float sum = LTC_ClippedSphereFormFactor( vectorFormFactor );
-
-    // *** Method II
-	// *** Integrate for every edge.
-	// float sum = 0.0;
-	
-	// sum += IntegrateEdge(PL[0], PL[1]);
-    // sum += IntegrateEdge(PL[1], PL[2]);
-    // sum += IntegrateEdge(PL[2], PL[3]);
-    // if (n >= 4)
-    //     sum += IntegrateEdge(PL[3], PL[4]);
-    // if (n == 5)
-	// 	sum += IntegrateEdge(PL[4], PL[0]);
-		
-	// sum =  max(0.0, sum);
-    
-    // *** Calculate color
-    vec3 e1 = normalize(L[0] - L[1]);
-    vec3 e2 = normalize(L[2] - L[1]);
-    vec3 N2 = cross(e1, e2); // Normal to light
-    vec3 V2 = N2 * dot(L[1], N2); // Vector to some point in light rect
-    vec2 Tlight_shape = vec2(length(L[0] - L[1]), length(L[2] - L[1]));
-    V2 = V2 - L[1];
-    float b = e1.y*e2.x - e1.x*e2.y + 0.1; // + .1 to remove artifacts
-	vec2 pLight = vec2((V2.y*e2.x - V2.x*e2.y)/b, (V2.x*e1.y - V2.y*e1.x)/b);
-   	pLight /= Tlight_shape;
-    // pLight -= .5;
-    // pLight /= 2.5;
-    // pLight += .5;
-    
-	vec3 ref_col;
-	//ref_col = filterBorderRegion(roughness + 2.,vec2(saturate(pLight.x),saturate(pLight.y)),tex);
-
-	//ref_col = FetchDiffuseFilteredTexture(roughness,L,vec3(sum),tex);
-
-    ref_col = textureLod(tex,pLight,4.).rgb;
-
-	vec3 Lo_i = vec3(sum)*ref_col;
-	
-    return Lo_i;
-
-}
-
 // *************** END LTC AREA LIGHT ***************
 `
+
+
+// *** The original lights glsl code, from three.js
 
 const RECT_AREALIGHT_SUFFIX_0 = `
 #if defined( USE_SHEEN )
@@ -1001,6 +848,8 @@ void computeMultiscattering( const in vec3 normal, const in vec3 viewDir, const 
 }
 `
 
+// *** The LTC AREALight's Hacking Implementation,but using RectAreaLight's void functions
+
 const RECT_AREALIGHT_HACK = `
 
 // *************** HACK THE RECT AREA LIGHT ***************
@@ -1034,129 +883,9 @@ uniform float external_roughness;
         if(isLTCWithTexture){
 
 
-
-            // *** METHOD I ***
-
-
-            // float LUTSIZE = 128.0;
-            // float MATRIX_PARAM_OFFSET = 0.01;
-
-
-            // float theta = acos(dot(normal, viewDir));
-    
-            // vec2 uv_0 = vec2(roughness, theta/(0.5*PI)) * float(LUTSIZE-1.);
-            // uv_0 += vec2(0.5);
-            
-            // vec4 params = texture(ltc_1, (uv_0+vec2(MATRIX_PARAM_OFFSET, 0.0))/vec2(LUTSIZE,LUTSIZE));
-            
-            // mat3 mInv = mat3(
-            //     vec3(  1,        0,      params.y),
-            //     vec3(  0,     params.z,   0),
-            //     vec3(params.w,   0,      params.x)
-            // );
-
-            // vec4 t2 = texture(ltc_2, uv_0);
-
-            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
-
-            // **** METHOD II ****
-            // const float LUT_SIZE = 8.0;
-            // const float LUT_SCALE = ( LUT_SIZE - 1.0 ) / LUT_SIZE;
-            // const float LUT_BIAS = 0.5 / LUT_SIZE;
-            // float MATRIX_PARAM_OFFSET = 1.0;
-        
-            // float dotNV = saturate( dot( normal, viewDir ) );
-        
-            // // texture parameterized by sqrt( GGX alpha ) and sqrt( 1 - cos( theta ) )
-            // vec2 uv_0 = vec2( roughness, sqrt( 1.0 - dotNV ) );
-        
-            // uv_0 = uv_0 * LUT_SCALE + LUT_BIAS;
-            // uv_0 +=  vec2(MATRIX_PARAM_OFFSET,0)/vec2(LUT_SIZE,LUT_SIZE);
-
-            // vec4 t1 = texture2D( ltc_1, uv_0 );
-            // vec4 t2 = texture2D( ltc_2, uv_0 );
-
-            // mat3 mInv = mat3(
-            //     vec3( t1.x, 0, t1.y ),
-            //     vec3(    0, 1,    0 ),
-            //     vec3( t1.z, 0, t1.w )
-            // );
-    
-            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
-            // *** result ***
-            
-    
-            // LTC Fresnel Approximation by Stephen Hill
-            // http://blog.selfshadow.com/publications/s2016-advances/s2016_ltc_fresnel.pdf
-
-
-            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture(roughness, normal, viewDir, position, mInv, rectCoords , ltc_tex);
-            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture(roughness,normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex );
-
-           
-            // *** METHOD III ***
-
-            // // vec2 uv = LTC_Uv( normal, viewDir, roughness );
-
-            // // vec4 t1 = texture2D( ltc_1, uv );
-            // // vec4 t2 = texture2D( ltc_2, uv );
-    
-            // const float LUT_SIZE = 64.0;
-            // const float LUT_SCALE = ( LUT_SIZE - 1.0 ) / LUT_SIZE;
-            // const float LUT_BIAS = 0.5 / LUT_SIZE;
-            // float MATRIX_PARAM_OFFSET = 16.0;
-
-            // float dotNV = saturate( dot( normal, viewDir ) );
-        
-            // // texture parameterized by sqrt( GGX alpha ) and sqrt( 1 - cos( theta ) )
-            // vec2 uv_0 = vec2( roughness , sqrt( 1.0 - dotNV ) );
-        
-            // uv_0 = uv_0 * LUT_SCALE + LUT_BIAS;
-            // //uv_0 +=  vec2(MATRIX_PARAM_OFFSET,0)/vec2(LUT_SIZE,LUT_SIZE);
-            
-
-            // vec4 t1 = texture2D( ltc_1, uv_0 );
-            // vec4 t2 = texture2D( ltc_2, uv_0 );
-
-            // // LTC Fresnel Approximation by Stephen Hill
-            // // http://blog.selfshadow.com/publications/s2016-advances/s2016_ltc_fresnel.pdf
-            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
-
-            // mat3 mInv = mat3(
-            //     vec3( t1.x, 0, t1.y ),
-            //     vec3(    0, 1,    0 ),
-            //     vec3( t1.z, 0, t1.w )
-            // );
-            
-            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture_0( roughness, normal, viewDir, position, mInv, rectCoords , ltc_tex,ltc_blur_tex);
-            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture_0( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex,ltc_blur_tex);
-
-
-            // *** METHOD IV 
-            // const float LUT_SIZE  = 64.0;
-            // const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
-            // const float LUT_BIAS  = 0.5/LUT_SIZE;
-
-            // float theta = acos(dot(normal, viewDir));
-            // vec2 uv = vec2(roughness, theta/(0.5*PI));
-            // uv = uv*LUT_SCALE + LUT_BIAS;
-            
-            // vec4 t1 = texture2D( ltc_1, uv );
-            // vec4 t2 = texture2D( ltc_2, uv );
-            // mat3 Minv = mat3(
-            //     vec3(  1,   0, t1.y),
-            //     vec3(  0, t1.z,   0),
-            //     vec3(t1.w,   0, t1.x)
-            // );
-
-            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
-            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, Minv, rectCoords , ltc_tex);
-            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex);
-           
-            // *** METHOD V ***
-
+            float m_roughness = roughness + normal.z + external_roughness;
             float ndotv = saturate(dot(normal, viewDir));
-            vec2 uv = vec2(roughness+external_roughness, sqrt(1.0 - ndotv)); //roughness
+            vec2 uv = vec2(m_roughness, sqrt(1.0 - ndotv)); //roughness
             uv = uv*LUT_SCALE + LUT_BIAS;
 
             vec4 t1 = texture(ltc_1, uv);
@@ -1168,27 +897,17 @@ uniform float external_roughness;
                 vec3(t1.z, 0, t1.w)
             );
 
-            //vec3 N, vec3 V, vec3 P, mat3 Minv, vec3 points[4], bool twoSided, sampler2D tex)
-
-            // vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
-            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, Minv, rectCoords , ltc_tex);
-            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_With_Texture( roughness, normal, viewDir, position, mat3( 1.0 ), rectCoords, ltc_tex);
-            
             vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
-            // reflectedLight.directSpecular += lightColor * fresnel * LTC_Evaluate_SelfShadow( normal, viewDir, position, Minv, rectCoords , false, ltc_tex);
-            // reflectedLight.directDiffuse += lightColor * material.diffuseColor * LTC_Evaluate_SelfShadow( normal, viewDir, position, mat3( 1.0 ), rectCoords,false, ltc_tex);
 
-            vec3 spec = LTC_Evaluate_SelfShadow(normal, viewDir, position, Minv, rectCoords, false,ltc_tex);
-            //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y;
+            vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, false,ltc_tex);
+            //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y; // lighterVersion
             spec *= lightColor * fresnel;
 
-
-            vec3 diff = LTC_Evaluate_SelfShadow(normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex);
-            diff *= lightColor; //* material.diffuseColor
+            vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex);
+            diff *= lightColor * material.diffuseColor;
 
             reflectedLight.directSpecular += spec;
             reflectedLight.directDiffuse += diff;
-
     
 
         }
@@ -1220,6 +939,9 @@ uniform float external_roughness;
 
 // *************** HACK THE RECT AREA LIGHT ***************
 `
+
+// *** The original lights glsl code, from three.js
+
 const RECT_AREALIGHT_SUFFIX_1 = `
 
 void RE_Direct_Physical( const in IncidentLight directLight, const in GeometricContext geometry, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
@@ -1405,8 +1127,12 @@ ref: React.ForwardedRef<any>
     const rectAreLightHelperRef = useRef<any>();
     const childrenRef = useRef<any>(null!);
 
-    const image_Tex = useLoader(THREE.TextureLoader,'./light_test.png')
-    const [threeTexture,setThreeTexture] = useState<THREE.Texture | null>(null);
+    const videoUrl = './test.mp4';
+    const imageUrl = './test.png';
+
+    const isVideo = true;
+
+    const image_Tex = useLoader(THREE.TextureLoader,imageUrl);
     const [copyVideo,setCopyVideo] = useState<boolean>(false);
     const videoRef = useRef<any>(null);
 
@@ -1454,13 +1180,14 @@ ref: React.ForwardedRef<any>
 
     const HackRectAreaLight = (tex:THREE.Texture) =>{
    
+        // *** Hacking Children's Material
         if(childrenRef.current){
             childrenRef.current.traverse((obj:any)=>{
                 if(obj.isMesh){
                     obj.material.onBeforeCompile = (shader:any) => {
                             shader.uniforms.isLTCWithTexture = { value: true };
                             shader.uniforms.ltc_tex = { value: tex };
-                            shader.uniforms.external_roughness = {value:0.2}
+                            shader.uniforms.external_roughness = {value:0.}
                             shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_physical_pars_fragment>`,
                             RECT_AREALIGHT_PREFIX
                             + LTC_AREALIGHT_CORE
@@ -1472,24 +1199,21 @@ ref: React.ForwardedRef<any>
                 }
             })
         }
+
+        // *** The Pseudo Helper of RectAreaLight(In fact,it is a Plane mesh) 
         if(rectAreLightHelperRef.current){
             rectAreLightHelperRef.current.onBeforeCompile = (shader:any) => {
                 shader.uniforms.vid_tex = {value:tex};
-
                 shader.vertexShader = shader.vertexShader.replace(`#include <common>`,
-                `
-                #include <common>
-                 varying vec2 vUv;
-                `
+                `#include <common>
+                varying vec2 vUv;`
                 )
-
                 shader.vertexShader = shader.vertexShader.replace(`#include <fog_vertex>`,
                 `
                 #include <fog_vertex>
                 vUv = uv;
                 `
                 )
-
                 shader.fragmentShader = shader.fragmentShader.replace(`uniform float opacity;`,
                 `uniform float opacity;
                  uniform sampler2D vid_tex;
@@ -1497,17 +1221,19 @@ ref: React.ForwardedRef<any>
                 `
                 )
                 shader.fragmentShader = shader.fragmentShader.replace(`#include <dithering_fragment>`,
-                    `#include <dithering_fragment>` +
-                    `
-                        gl_FragColor = texture2D(vid_tex,vUv);
-                    `
+                    `#include <dithering_fragment>
+                    gl_FragColor = texture2D(vid_tex,vUv);`
                 )
+
             }
         }
     }
 
-    // *** Load Video Texture ***
-    const setupVideo = () =>{
+    // *** Load Video Texture 
+    // *** from 'Animating textures in WebGL'
+    // *** https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Animating_textures_in_WebGL
+
+    const setupVideo = (src:string) =>{
         videoRef.current = document.createElement('video');
         videoRef.current.src = './test.mp4';
         videoRef.current.crossOrigin = 'Anonymous'
@@ -1532,40 +1258,36 @@ ref: React.ForwardedRef<any>
                 checkUpdate();
             },
             true
-        );
-
-        
+        );        
     
-        videoRef.current.src = './test.mp4';
+        videoRef.current.src = src;
         videoRef.current.play();
 
 
         function checkUpdate() {
             if (playing && timeupdate) {
+                // * tik tok tik tok *
                 setCopyVideo(true)
               }
             
         }
-
-        const vidTex = new THREE.VideoTexture( videoRef.current );
-        vidTex.minFilter = THREE.NearestFilter;
-        vidTex.magFilter = THREE.LinearFilter;
-        vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
-        
-        setThreeTexture(vidTex)
        
     }
 
-    useEffect(()=>{
-        setupVideo()
-    },[])
+    const initLTCTexture = () =>{
+        RectAreaLightUniformsLib.init();
+    }
 
     // *** Init LTC Texture ***
+
     useEffect(()=>{
         if(rectAreaLightRef.current){
-            RectAreaLightUniformsLib.init();
-            if(isEnableHelper)
-                scene.add(new RectAreaLightHelper(rectAreaLightRef.current));
+            if(isVideo)
+                setupVideo(videoUrl)
+            else{
+                HackRectAreaLight(image_Tex)
+            }
+            initLTCTexture();
         }
 
     },[rectAreaLightRef])
@@ -1573,11 +1295,6 @@ ref: React.ForwardedRef<any>
 
     useFrame(() => {
 
-            // *** Update Video Texture ***
-            var vidTex = new THREE.VideoTexture( videoRef.current );
-            vidTex.minFilter = THREE.NearestFilter;
-            vidTex.magFilter = THREE.LinearFilter;
-            vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
 
             // if(kawaseBlurMaterialRefA.current){
             //     kawaseBlurMaterialRefA.current.uniforms.buff_tex.value = threeTexture
@@ -1617,7 +1334,15 @@ ref: React.ForwardedRef<any>
             // }
 
             
-            HackRectAreaLight(vidTex)
+            if(isVideo){
+                // *** Update Video Texture ***
+                var vidTex = new THREE.VideoTexture( videoRef.current );
+                vidTex.minFilter = THREE.NearestFilter;
+                vidTex.magFilter = THREE.LinearFilter;
+                vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
+
+                HackRectAreaLight(vidTex)
+            }
 
     },)
 
@@ -1800,32 +1525,74 @@ const LTCTexturedLightDemo = () =>{
     const {size,gl,camera} = useThree()
     const depthBuffer = useDepthBuffer({ frames: 1 })
     const { nodes, materials } = useGLTF('./model.gltf')
-    const ref = useRef();
+    const ltcRef = useRef();
+    const dragonRef = useRef();
 
-    const {dragon_position} = useControls('attributes',{
-        dragon_position:{
-            value:[0,0,0],
-            step:0.1,
+    const {floor_roughness,dragon_roughness} = useControls('Material',{
+  
+        floor_roughness:{
+            value:0.1,
+            min:0.0,
+            max:10.0,
+        },
+        dragon_roughness:{
+            value:0.5,
+            min:0.0,
+            max:10.0,
+            onChange:(v:any)=>{
+            
+                if(dragonRef.current){
+                    dragonRef.current.traverse((obj:any)=>{
+                        if(obj.isMesh){
+                            obj.material.roughness = v;
+                        }
+                    })
+                }
+            }
         }
     })
+
+
+    useFrame(({gl}) => {
+        // get elpiseTime
+        const time =  performance.now() * 0.001;
+        if(dragonRef.current){
+            dragonRef.current.position.x = 1. * Math.sin(time) ;
+            dragonRef.current.position.y = 1. + 1. * Math.cos(time);
+        }
+    })
+
+    const floorMap = useLoader(THREE.TextureLoader,'./floor2.jpg');
+    const floorNormal = useLoader(THREE.TextureLoader,'./floor_normal.png');
+    floorMap.repeat.set(20,20);
+    floorNormal.repeat.set(20,20);
+    floorNormal.wrapS = floorNormal.wrapT = floorMap.wrapS = floorMap.wrapT = THREE.RepeatWrapping;
+    
 
     return(
         <>
         <LTCAreaLightWithHelper 
-            ref={ref} 
+            ref={ltcRef} 
             position={[0, 3, -5]} 
             rotation={[0,0,0]} 
-            // rotation={[0,-0,0]} 
+            // rotation={[0,-Math.PI,0]} 
             color="white" 
             isEnableHelper={false}    
         >
-            <mesh position={dragon_position} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
+            <mesh ref={dragonRef} position={[0,0,0]} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
             <mesh receiveShadow position={[0, -1, 0]} rotation-x={-Math.PI / 2}>
                 <planeGeometry args={[50, 50]} />
                 <meshPhongMaterial />
             </mesh>
             <Plane args={[100, 100]} rotation={[-Math.PI / 2, 0, 0]}>
-                <meshStandardMaterial color="#808080" roughness={0.1} metalness={0} />
+                <meshStandardMaterial 
+                    color="#ffffff" 
+                    roughness={floor_roughness} 
+                    map={floorMap}
+                    normalScale={[10,10]}
+                    normalMap={floorNormal}
+                    metalness={0} 
+                />
             </Plane>
         </LTCAreaLightWithHelper>
         </>
@@ -1844,7 +1611,7 @@ export const Effect = (props:any) =>{
             <Perf style={{position:'absolute',top:'10px',left:'10px',width:'360px',borderRadius:'10px'}}/>
             <ambientLight intensity={0.015}></ambientLight>
             <color attach="background" args={['#202020']} />
-            <fog attach="fog" args={['#202020', 5, 20]} />
+            {/* <fog attach="fog" args={['#202020', 5, 20]} /> */}
             <LTCTexturedLightDemo/>
             <OrbitControls></OrbitControls>
           </Canvas>
