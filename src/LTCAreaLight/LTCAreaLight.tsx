@@ -10,20 +10,37 @@ import { RECT_AREALIGHT_PREFIX,LTC_AREALIGHT_CORE,RECT_AREALIGHT_SUFFIX_0,RECT_A
 import { DOWNSAMPLE_BLUR, UPSAMPLE_BLUR } from "../LTCAreaLight/shader/DualKawaseBlur_Shader";
 import { common_vertex_main, prefix_frag, prefix_vertex } from "../LTCAreaLight/shader/Utils";
 
-const LTCAreaLightWithHelper = React.forwardRef(({ 
-    children,
-    position,
-    rotation,
-    width,
-    height,
-    isEnableHelper,
-    color,
-    intensity,
-    external_roughness,
-    light_intensity
-
-}:{
+// TODO：Implement the Shader Code in this Component
+const LTCAreaLightContainer = ({ children }:{
     children?: React.ReactNode;
+
+}) => {
+
+    // *** Init LTC Texture ***
+
+    const initLTCTexture = () =>{
+        RectAreaLightUniformsLib.init();
+    }
+    
+    useEffect(()=>{
+        initLTCTexture();
+
+    },[])
+
+
+    return(
+        <>
+            {children}
+        </>
+    )
+  
+};
+
+LTCAreaLightContainer.displayName = 'LTCAreaLightContainer'
+
+// TODO：Implement the LTC Light Only In This Component
+
+const LTCAreaLight = React.forwardRef(({ position,rotation, color,intensity,width,height,isEnableHelper }:{
     position?: [number, number, number];
     rotation?: [number, number, number];
     width?: number;
@@ -32,8 +49,6 @@ const LTCAreaLightWithHelper = React.forwardRef(({
     isEnableHelper?:boolean;
     color?: string;
     intensity?: number;
-    external_roughness?:number;
-    light_intensity?:number;
 
 },
 ref: React.ForwardedRef<any>
@@ -42,7 +57,6 @@ ref: React.ForwardedRef<any>
 
     const rectAreaLightRef = useRef<any>();
     const rectAreLightHelperRef = useRef<any>();
-    const childrenRef = useRef<any>(null!);
     
     const blurBufferSize = 128.;
 
@@ -50,18 +64,6 @@ ref: React.ForwardedRef<any>
     const imageUrl = './test.png';
 
     const isVideoTexture = true;
-    
-    const [lightIntensity,setLightIntensity] = useState<number>(light_intensity?light_intensity:1.);
-    const [externalRoughness,setExternalRoughness] = useState<number>(external_roughness?external_roughness:0.);
-
-    useEffect(()=>{
-        if(light_intensity){
-            setLightIntensity(light_intensity)
-        }
-        if(external_roughness){
-            setExternalRoughness(external_roughness)
-        }   
-    },[light_intensity,external_roughness])
 
     const image_Tex = useLoader(THREE.TextureLoader,imageUrl);
     const [copyVideo,setCopyVideo] = useState<boolean>(false);
@@ -105,57 +107,6 @@ ref: React.ForwardedRef<any>
         ]
     },[])
 
-    const HackRectAreaLight = (tex:THREE.Texture,blur_tex:THREE.Texture) =>{
-   
-        // *** Hacking Children's Material
-        if(childrenRef.current){
-            childrenRef.current.traverse((obj:any)=>{
-                if(obj.isMesh){
-                    obj.material.onBeforeCompile = (shader:any) => {
-                            shader.uniforms.isLTCWithTexture = { value: true };
-                            shader.uniforms.ltc_tex = { value: blur_tex };
-                            shader.uniforms.external_roughness = {value:externalRoughness}
-                            shader.uniforms.light_intensity = {value:lightIntensity}
-                            shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_physical_pars_fragment>`,
-                            RECT_AREALIGHT_PREFIX
-                            + LTC_AREALIGHT_CORE
-                            + RECT_AREALIGHT_SUFFIX_0
-                            + RECT_AREALIGHT_HACK
-                            + RECT_AREALIGHT_SUFFIX_1
-                            )
-                    }
-                }
-            })
-        }
-
-        // *** The Pseudo Helper of RectAreaLight(In fact,it is a Plane mesh) 
-        if(rectAreLightHelperRef.current){
-            rectAreLightHelperRef.current.onBeforeCompile = (shader:any) => {
-                shader.uniforms.vid_tex = {value:tex};
-                shader.vertexShader = shader.vertexShader.replace(`#include <common>`,
-                `#include <common>
-                varying vec2 vUv;`
-                )
-                shader.vertexShader = shader.vertexShader.replace(`#include <fog_vertex>`,
-                `
-                #include <fog_vertex>
-                vUv = uv;
-                `
-                )
-                shader.fragmentShader = shader.fragmentShader.replace(`uniform float opacity;`,
-                `uniform float opacity;
-                 uniform sampler2D vid_tex;
-                 varying vec2 vUv;
-                `
-                )
-                shader.fragmentShader = shader.fragmentShader.replace(`#include <dithering_fragment>`,
-                    `#include <dithering_fragment>
-                    gl_FragColor = texture2D(vid_tex,vUv);`
-                )
-
-            }
-        }
-    }
 
     // *** Load Video Texture 
     // *** from 'Animating textures in WebGL'
@@ -201,12 +152,6 @@ ref: React.ForwardedRef<any>
        
     }
 
-    // *** Init The LTC Texture ***
-
-    const initLTCTexture = () =>{
-        RectAreaLightUniformsLib.init();
-    }
-
     
     // *** Dual Kaswase Blur Pass ***
     const DualKawaseBlurPass = (tex:THREE.Texture):THREE.Texture =>{
@@ -241,35 +186,6 @@ ref: React.ForwardedRef<any>
 
         return blurFBOD.texture;
     }
-
-    // *** Init LTC Texture ***
-
-    useEffect(()=>{
-        if(rectAreaLightRef.current){
-            initLTCTexture();
-            if(isVideoTexture)
-                setupVideo(videoUrl)
-            else{
-                HackRectAreaLight(image_Tex,DualKawaseBlurPass(image_Tex))
-            }
-        }
-
-    },[rectAreaLightRef])
-
-
-    useFrame(() => {
-
-            if(isVideoTexture){
-                // *** Update Video Texture ***
-                var vidTex = new THREE.VideoTexture( videoRef.current );
-                vidTex.minFilter = THREE.NearestFilter;
-                vidTex.magFilter = THREE.LinearFilter;
-                vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
-                HackRectAreaLight(vidTex,DualKawaseBlurPass(vidTex))
-            }
-
-    },)
-
 
   
     //return null;
@@ -384,130 +300,10 @@ ref: React.ForwardedRef<any>
                 <meshBasicMaterial ref={rectAreLightHelperRef} color={color?color:'white'} />
             </Plane>}
             
-            {/* All objects in scene */}
-            <group ref={childrenRef}>
-                {children}
-            </group>
         </>
     )
   
 });
 
-LTCAreaLightWithHelper.displayName = 'LTCAreaLightWithHelper'
-
-const LTCTexturedLightDemo = () =>{
-
-    const {size,gl,camera} = useThree()
-    const depthBuffer = useDepthBuffer({ frames: 1 })
-    const { nodes, materials } = useGLTF('./model.gltf')
-    const ltcRef = useRef<any>();
-    const dragonRef = useRef<any>();
-
-    const {floor_roughness,dragon_roughness} = useControls('Object Material',{
-  
-        floor_roughness:{
-            value:0.1,
-            min:0.0,
-            max:10.0,
-        },
-        dragon_roughness:{
-            value:0.5,
-            min:0.0,
-            max:10.0,
-            onChange:(v:any)=>{
-            
-                if(dragonRef.current){
-                    dragonRef.current.traverse((obj:any)=>{
-                        if(obj.isMesh){
-                            obj.material.roughness = v;
-                        }
-                    })
-                }
-            }
-        }
-    }) as {
-        floor_roughness:number,
-        dragon_roughness:number
-    }
-
-    var {light_intensity,external_roughness} = useControls('LTC AreaLight',{
-  
-        light_intensity:{
-            value:1.,
-            min:0.0,
-            max:10.0,
-        },
-        external_roughness:{
-            value:0.,
-            min:0.0,
-            max:10.0,
-
-        }
-    }) as {
-        light_intensity:number,
-        external_roughness:number
-    }
-
-
-    useFrame(({gl}) => {
-        const time =  performance.now() * 0.001;
-        if(dragonRef.current){
-            //dragonRef.current.position.x = 1. * Math.sin(time) ;
-            //dragonRef.current.position.y = 1. + 1. * Math.cos(time);
-        }
-    })
-
-    const floorMap = useLoader(THREE.TextureLoader,'./floor2.jpg');
-    floorMap.repeat.set(20,20);
-    floorMap.wrapS = floorMap.wrapT = THREE.RepeatWrapping;
-    
-
-    return(
-        <>
-        <LTCAreaLightWithHelper 
-            ref={ltcRef} 
-            position={[0, 3, -5]} 
-            rotation={[0,0,0]} 
-            color="white" 
-            isEnableHelper={true}
-            external_roughness={external_roughness}
-            light_intensity={light_intensity}    
-        >
-            <mesh ref={dragonRef} position={[0,0,0]} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
-            <mesh receiveShadow position={[0, -1, 0]} rotation-x={-Math.PI / 2}>
-                <planeGeometry args={[50, 50]} />
-                <meshPhongMaterial />
-            </mesh>
-            <Plane args={[100, 100]} rotation={[-Math.PI / 2, 0, 0]}>
-                <meshStandardMaterial 
-                    color="#ffffff" 
-                    roughness={floor_roughness} 
-                    map={floorMap}
-                />
-            </Plane>
-        </LTCAreaLightWithHelper>
-        </>
-    )
-}
-
-
-export const Effect = (props:any) =>{
-
-    return(
-      <>
-          <Canvas 
-            camera={{ position: [0, 1, 8], fov: 50, near: 0.1, far: 1000 }}
-            className={props.className} 
-            style={{...props.style}}>
-            <Perf style={{position:'absolute',top:'10px',left:'10px',width:'360px',borderRadius:'10px'}}/>
-            <ambientLight intensity={0.015}></ambientLight>
-            <color attach="background" args={['#202020']} />
-            <LTCTexturedLightDemo/>
-            <OrbitControls></OrbitControls>
-          </Canvas>
-      </>
-  
-    )
-}
-
+LTCAreaLight.displayName = 'LTCAreaLight'
 
