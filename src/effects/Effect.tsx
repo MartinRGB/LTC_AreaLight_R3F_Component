@@ -11,21 +11,51 @@ import { DOWNSAMPLE_BLUR, UPSAMPLE_BLUR } from "../LTCAreaLight/shader/DualKawas
 import { common_vertex_main, prefix_frag, prefix_vertex } from "../LTCAreaLight/shader/Utils";
 
 
+const LTCAreaLightContainer = ({ children }:{
+    children?: React.ReactNode;
+
+},
+ref: React.ForwardedRef<any>
+) => {
+
+    // *** Init LTC Texture ***
+
+    const initLTCTexture = () =>{
+        RectAreaLightUniformsLib.init();
+    }
+    
+    useEffect(()=>{
+        initLTCTexture();
+
+    },[])
+
+
+    return(
+        <>
+            {children}
+        </>
+    )
+  
+};
+
+LTCAreaLightContainer.displayName = 'LTCAreaLightContainer'
+
+
+
 const LTCAreaLightWithHelper = React.forwardRef(({ children,position,rotation, color,intensity,width,height,isEnableHelper }:{
     children?: React.ReactNode;
     position?: [number, number, number];
     rotation?: [number, number, number];
-    color?: string;
-    intensity?: number;
     width?: number;
     height?: number;
     texture?: THREE.Texture | string;
     isEnableHelper?:boolean;
+    color?: string;
+    intensity?: number;
+
 },
 ref: React.ForwardedRef<any>
 ) => {
-    // Besides the useThree hook, all of this is taken straight from one of the examples on threejs.org: https://threejs.org/examples/#webgl_lights_rectarealight.
-  
     const {gl,camera} = useThree();
 
     const rectAreaLightRef = useRef<any>();
@@ -80,8 +110,6 @@ ref: React.ForwardedRef<any>
             new THREE.WebGLRenderTarget(blurBufferSize,blurBufferSize,FBOSettings)
         ]
     },[])
-
-
 
     const HackRectAreaLight = (tex:THREE.Texture,blur_tex:THREE.Texture) =>{
    
@@ -243,7 +271,6 @@ ref: React.ForwardedRef<any>
                 vidTex.minFilter = THREE.NearestFilter;
                 vidTex.magFilter = THREE.LinearFilter;
                 vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
-
                 HackRectAreaLight(vidTex,DualKawaseBlurPass(vidTex))
             }
 
@@ -359,9 +386,9 @@ ref: React.ForwardedRef<any>
             />
 
             {/* LTC Area Light Helper -> Screen */}
-            <Plane args={[width?width:4,height?height:4]} position={position?position:[0,0,0]}>
+            {isEnableHelper && <Plane args={[width?width:4,height?height:4]} position={position?position:[0,0,0]}>
                 <meshBasicMaterial ref={rectAreLightHelperRef} color={color?color:'white'} />
-            </Plane>
+            </Plane>}
             
             {/* All objects in scene */}
             <group ref={childrenRef}>
@@ -382,7 +409,7 @@ const LTCTexturedLightDemo = () =>{
     const ltcRef = useRef<any>();
     const dragonRef = useRef<any>();
 
-    const {floor_roughness,dragon_roughness} = useControls('Material',{
+    const {floor_roughness,dragon_roughness} = useControls('Object Material',{
   
         floor_roughness:{
             value:0.1,
@@ -429,9 +456,8 @@ const LTCTexturedLightDemo = () =>{
             ref={ltcRef} 
             position={[0, 3, -5]} 
             rotation={[0,0,0]} 
-            // rotation={[0,-Math.PI,0]} 
             color="white" 
-            isEnableHelper={false}    
+            isEnableHelper={true}    
         >
             <mesh ref={dragonRef} position={[0,0,0]} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
             <mesh receiveShadow position={[0, -1, 0]} rotation-x={-Math.PI / 2}>
@@ -443,7 +469,6 @@ const LTCTexturedLightDemo = () =>{
                     color="#ffffff" 
                     roughness={floor_roughness} 
                     map={floorMap}
-                    metalness={0} 
                 />
             </Plane>
         </LTCAreaLightWithHelper>
