@@ -879,8 +879,6 @@ export const RECT_AREALIGHT_HACK = `
 uniform bool isLTCWithTexture;
 uniform sampler2D ltc_tex;
 uniform sampler2D ltc_blur_tex;
-uniform float external_roughness;
-uniform float light_intensity;
 
 #if NUM_RECT_AREA_LIGHTS > 0
 
@@ -907,11 +905,11 @@ uniform float light_intensity;
         vec4 mapCol;
         float m_roughness;
 
-        m_roughness = roughness + external_roughness;
+        m_roughness = roughness ;
 
         #ifdef USE_MAP
             mapCol = texture2D( map, vMapUv );
-            m_roughness = (1. - (mapCol.r + mapCol.g + mapCol.b)/3.) + normal.z + external_roughness;
+            m_roughness = (1. - (mapCol.r + mapCol.g + mapCol.b)/3.) + normal.z ;
             m_roughness *= roughness;
         #endif
 
@@ -936,8 +934,8 @@ uniform float light_intensity;
         vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,ltc_tex,isLTCWithTexture);
         diff *= lightColor * material.diffuseColor;
 
-        reflectedLight.directSpecular += spec * light_intensity;
-        reflectedLight.directDiffuse += diff * light_intensity;
+        reflectedLight.directSpecular += spec ;
+        reflectedLight.directDiffuse += diff ;
 
 	}
 
