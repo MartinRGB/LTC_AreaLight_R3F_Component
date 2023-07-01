@@ -876,12 +876,11 @@ export const RECT_AREALIGHT_HACK = `
 
 // *************** HACK THE RECT AREA LIGHT ***************
 
-uniform bool isLTCWithTexture;
 uniform sampler2D ltc_tex;
 
 #if NUM_RECT_AREA_LIGHTS > 0
 
-	void RE_Direct_RectArea_Physical( const in RectAreaLight rectAreaLight, const in GeometricContext geometry, const in PhysicalMaterial material,const in sampler2D rectAreaLightTex, inout ReflectedLight reflectedLight ) {
+	void RE_Direct_RectArea_Physical( const in RectAreaLight rectAreaLight, const in GeometricContext geometry, const in PhysicalMaterial material,const in sampler2D rectAreaLightTex,const in bool enableRectAreaLightTexture, inout ReflectedLight reflectedLight ) {
 
 		vec3 normal = geometry.normal;
 		vec3 viewDir = geometry.viewDir;
@@ -926,11 +925,11 @@ uniform sampler2D ltc_tex;
 
         vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
 
-        vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, false,rectAreaLightTex,isLTCWithTexture);
+        vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, false,rectAreaLightTex,enableRectAreaLightTexture);
         //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y; // lighterVersion
         spec *= lightColor * 0.5 * fresnel;
 
-        vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,rectAreaLightTex,isLTCWithTexture);
+        vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, false,rectAreaLightTex,enableRectAreaLightTexture);
         diff *= lightColor * material.diffuseColor;
 
         reflectedLight.directSpecular += spec ;
@@ -1236,6 +1235,7 @@ float getSpotAttenuation( const in float coneCosine, const in float penumbraCosi
     // *** Hack The RectAreaLight Textures ***
     uniform sampler2D rectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 	uniform RectAreaLight rectAreaLights[ NUM_RECT_AREA_LIGHTS ];
+	uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 
 #endif
 
@@ -1417,7 +1417,7 @@ IncidentLight directLight;
 
 		rectAreaLight = rectAreaLights[ i ];
         // *** Hack the RectAreaLight Textures ***
-		RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ], reflectedLight );
+		RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ],enableRectAreaLightTextures[i],reflectedLight );
 
 	}
 	#pragma unroll_loop_end

@@ -31,6 +31,7 @@ ref: React.ForwardedRef<any>
     }
 
     const texArrRef = useRef<any>([]);
+    const texEnableArrRef = useRef<any>([]);
     const [texIsPrepared,SetTexIsPrepared] = useState<boolean>(false);
 
     useEffect(()=>{
@@ -43,10 +44,18 @@ ref: React.ForwardedRef<any>
             
             if(childrenRef.current){
                 texArrRef.current = [];
+                texEnableArrRef.current=[];
                 SetTexIsPrepared(false);                
                 childrenRef.current.traverse((obj:any)=>{
-                    if(obj.isRectAreaLight && obj.rectAreaLightTexture){
-                        texArrRef.current.push(obj.rectAreaLightTexture);
+                    if(obj.isRectAreaLight){
+                        if(obj.rectAreaLightTexture){
+                            texEnableArrRef.current.push(true);
+                            texArrRef.current.push(obj.rectAreaLightTexture);
+                        }
+                        else{
+                            texEnableArrRef.current.push(false);
+                            texArrRef.current.push(null);
+                        }
                     }
 
                 })
@@ -60,15 +69,9 @@ ref: React.ForwardedRef<any>
                 childrenRef.current.traverse((obj:any)=>{
                     if(obj.isMesh){
                         obj.material.onBeforeCompile = (shader:any) => {
-
-                            if(texArrRef.current.length > 0){
-                                shader.uniforms.isLTCWithTexture = { value: true };
-                                shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
-                            }
-                            else{
-                                shader.uniforms.isLTCWithTexture = { value: false };
-                                shader.uniforms.rectAreaLightTextures = { value:[null]};
-                            }
+                            console.log(texArrRef.current)
+                            shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
+                            shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
 
                             shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_pars_begin>`,
                             HACKED_LIGHTS_PARS_BEGIN
@@ -371,7 +374,6 @@ const LTCTexturedLightDemo = () =>{
     const {size,gl,camera,scene} = useThree()
     const depthBuffer = useDepthBuffer({ frames: 1 })
     const { nodes, materials } = useGLTF('./model.gltf')
-    const ltcRef = useRef<any>();
     const dragonRef = useRef<any>();
 
 
@@ -379,40 +381,8 @@ const LTCTexturedLightDemo = () =>{
     const imageUrl = './test.png';
 
     const [copyVideo,setCopyVideo] = useState<boolean>(false);
-    const [texture,setTexture] = useState<THREE.Texture | null>(null);
-    const img_tex = useLoader(THREE.TextureLoader,'./test.png');
-
-
-    // *** Load Image Texture
-    // *** https://threejs.org/docs/#api/en/loaders/TextureLoader    
-    const setupImage = (src:string) =>{
-
-        // instantiate a loader
-        const loader = new THREE.TextureLoader();
-
-        // load a resource
-        loader.load(
-            // resource URL
-            src,
-
-            // onLoad callback
-            function ( texture ) {
-                // in this example we create the material when the texture is loaded
-                setTexture(texture)
-            },
-
-            // onProgress callback currently not supported
-            undefined,
-
-            // onError callback
-            function ( err ) {
-                console.error( 'An error happened.' );
-            }
-        );
-
-
-
-    }
+    const [vid_tex,setVidTexture] = useState<THREE.Texture | null>(null);
+    const img_tex = useLoader(THREE.TextureLoader,imageUrl);
 
     // *** Load Video Texture 
     // *** from 'Animating textures in WebGL'
@@ -461,12 +431,11 @@ const LTCTexturedLightDemo = () =>{
         vidTex.magFilter = THREE.LinearFilter;
         vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
 
-        setTexture(vidTex)
+        setVidTexture(vidTex)
 
     }
 
     useEffect(()=>{
-        //setupImage(imageUrl)
         setupVideo(videoUrl)
     },[])
 
@@ -500,51 +469,144 @@ const LTCTexturedLightDemo = () =>{
         dragon_roughness:number
     }
 
-    // *** AreaLight Properties
-    var {position,rotation,color,intensity,width,height} = useControls('LTC AreaLight',{
-        position:{
+    // *** Video AreaLight Properties
+    var {position0,rotation0,color0,intensity0,width0,height0} = useControls('Video LTC AreaLight',{
+        position0:{
             value:[0,3,-5],
+            label:'Position',
         },
-        rotation:{
+        rotation0:{
             value:[0,0,0],
             step:0.1,
+            label:'Rotation',
         },
-        color:{
+        color0:{
             value:'#ffffff',
+            label:'Color',
         },
 
-        intensity:{
+        intensity0:{
             value:15,
             min:0.01,
             max:100.0,
             step:0.01,
+            label:'Intensity',
         },
-        width:{
+        width0:{
             value:6.4,
             min:0.01,
             max:100.0,
             step:0.01,
+            label:'Width',
         },
-        height:{
+        height0:{
             value:4,
             min:0.01,
             max:100.0,
             step:0.01,
+            label:'Height',
         },
-
     }) as {
-        position:[number,number,number],
-        rotation:[number,number,number],
-        color:string
-        intensity:number,
-        width:number,
-        height:number,
-    
+        position0:[number,number,number],
+        rotation0:[number,number,number],
+        color0:string
+        intensity0:number,
+        width0:number,
+        height0:number,
     }
 
-    useFrame(()=>{
-        //console.log(scene)
-    },)
+    // *** Image AreaLight Properties
+    var {position1,rotation1,color1,intensity1,width1,height1} = useControls('Image LTC AreaLight',{
+        position1:{
+            value:[10,3,0],
+            label:'Position',
+        },
+        rotation1:{
+            value:[0,-Math.PI/2,0],
+            step:0.1,
+            label:'Rotation',
+        },
+        color1:{
+            value:'#ffffff',
+            label:'Color',
+        },
+
+        intensity1:{
+            value:15,
+            min:0.01,
+            max:100.0,
+            step:0.01,
+            label:'Intensity',
+        },
+        width1:{
+            value:6.4,
+            min:0.01,
+            max:100.0,
+            step:0.01,
+            label:'Width',
+        },
+        height1:{
+            value:4,
+            min:0.01,
+            max:100.0,
+            step:0.01,
+            label:'Height',
+        },
+    }) as {
+        position1:[number,number,number],
+        rotation1:[number,number,number],
+        color1:string
+        intensity1:number,
+        width1:number,
+        height1:number,
+    }
+
+    // *** Color AreaLight Properties
+    var {position2,rotation2,color2,intensity2,width2,height2} = useControls('Color LTC AreaLight',{
+
+        position2:{
+            value:[-10,3,0],
+            label:'Position',
+        },
+        rotation2:{
+            value:[0,Math.PI/2,0],
+            step:0.1,
+            label:'Rotation',
+        },
+        color2:{
+            value:'#ffffff',
+            label:'Color',
+        },
+
+        intensity2:{
+            value:15,
+            min:0.01,
+            max:100.0,
+            step:0.01,
+            label:'Intensity',
+        },
+        width2:{
+            value:6.4,
+            min:0.01,
+            max:100.0,
+            step:0.01,
+            label:'Width',
+        },
+        height2:{
+            value:4,
+            min:0.01,
+            max:100.0,
+            step:0.01,
+            label:'Height',
+        },
+    }) as {
+        position2:[number,number,number],
+        rotation2:[number,number,number],
+        color2:string
+        intensity2:number,
+        width2:number,
+        height2:number,
+    }
 
     // *** floor texture
     const floorMap = useLoader(THREE.TextureLoader,'./floor2.jpg');
@@ -557,36 +619,36 @@ const LTCTexturedLightDemo = () =>{
         <LTCAreaLightProxy>
             <LTCAreaLight
                 isEnableHelper={true}
-                position={position} 
-                rotation={rotation} 
-                color={color} 
-                width={width}
-                height={height}
-                intensity={intensity}
-                texture={texture}
+                position={position0} 
+                rotation={rotation0} 
+                color={color0} 
+                width={width0}
+                height={height0}
+                intensity={intensity0}
+                texture={vid_tex}
                 blurSize={64}
             ></LTCAreaLight>
 
             <LTCAreaLight
                 isEnableHelper={true}
-                position={[10,3,0]} 
-                rotation={[0,-Math.PI/2,0]} 
-                color={color} 
-                width={width}
-                height={height}
-                intensity={intensity}
+                position={position1} 
+                rotation={rotation1} 
+                color={color1} 
+                width={width1}
+                height={height1}
+                intensity={intensity1}
                 texture={img_tex}
                 blurSize={64}
             ></LTCAreaLight>
 
             <LTCAreaLight
                 isEnableHelper={true}
-                position={[-10,3,0]} 
-                rotation={[0,Math.PI/2,0]} 
-                color={color} 
-                width={width}
-                height={height}
-                intensity={intensity}
+                position={position2} 
+                rotation={rotation2} 
+                color={color2} 
+                width={width2}
+                height={height2}
+                intensity={intensity2}
                 texture={null}
                 blurSize={64}
             ></LTCAreaLight>
