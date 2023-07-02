@@ -1,4 +1,4 @@
-import { Box, OrbitControls, Plane, useDepthBuffer, useGLTF } from "@react-three/drei"
+import { Box, OrbitControls, Plane, TransformControls, useGLTF } from "@react-three/drei"
 import { Canvas, useThree, useFrame, useLoader } from "@react-three/fiber"
 import { useControls } from "leva";
 import {  useEffect, useRef, useState,Suspense } from "react";
@@ -13,6 +13,10 @@ const LTCTexturedLightDemo = () =>{
     // Init model
     const { nodes, materials }:any = useGLTF('./model.gltf')
     const dragonRef = useRef<any>();
+    const ltc1Ref = useRef<any>();
+    const ltc2Ref = useRef<any>();
+    const ltc3Ref = useRef<any>();
+    const ltc4Ref = useRef<any>();
 
     // Init textures
     const videoUrl1 = './test1.mp4';
@@ -88,10 +92,26 @@ const LTCTexturedLightDemo = () =>{
         const time = state.clock.getElapsedTime();
         if(dragonRef.current){
             dragonRef.current.rotation.y += 0.01;
-            dragonRef.current.position.y = 1. + Math.sin(time);
-            dragonRef.current.position.x = Math.cos(time);
+        }
+        if(ltc1Ref.current){
+            ltc1Ref.current.position.x = 5.* Math.sin(time);
+        }
+
+        if(ltc2Ref.current){
+            ltc2Ref.current.position.y =  2.* Math.sin(time);
+        }
+
+        if(ltc3Ref.current){
+            ltc3Ref.current.position.y =  2.* Math.cos(time);
+        }
+
+        if(ltc4Ref.current){
+            ltc4Ref.current.rotation.y += 0.02;
         }
     },)
+
+    
+    const [isControlEnabled,setControlEnabled] = useState(true)
 
     // *** Object Material Properties
     const {floor_roughness,dragon_roughness} = useControls('Object Material',{
@@ -119,13 +139,13 @@ const LTCTexturedLightDemo = () =>{
         }
     }) as {
         floor_roughness:number,
-        dragon_roughness:number
+        dragon_roughness:number,
     }
 
     // *** Video1 AreaLight Properties
     const {position0,rotation0,color0,intensity0,width0,height0} = useControls('Video1 LTC AreaLight',{
         position0:{
-            value:[0,3,-7],
+            value:[0,2,-9],
             label:'Position',
         },
         rotation0:{
@@ -171,7 +191,7 @@ const LTCTexturedLightDemo = () =>{
     // *** Image AreaLight Properties
     const {position1,rotation1,color1,intensity1,width1,height1} = useControls('Image LTC AreaLight',{
         position1:{
-            value:[8,3,0],
+            value:[8,2,0],
             label:'Position',
         },
         rotation1:{
@@ -218,7 +238,7 @@ const LTCTexturedLightDemo = () =>{
     const {position2,rotation2,color2,intensity2,width2,height2} = useControls('Color LTC AreaLight',{
 
         position2:{
-            value:[-8,3,0],
+            value:[-8,2,0],
             label:'Position',
         },
         rotation2:{
@@ -265,7 +285,7 @@ const LTCTexturedLightDemo = () =>{
     const {position3,rotation3,color3,intensity3,width3,height3} = useControls('Video2 LTC AreaLight',{
 
         position3:{
-            value:[0,3,7],
+            value:[0,2,9],
             label:'Position',
         },
         rotation3:{
@@ -307,7 +327,7 @@ const LTCTexturedLightDemo = () =>{
         width3:number,
         height3:number,
     }
-    
+
 
     // TODO: Remove 3D Objects from Proxy
     return(
@@ -318,6 +338,7 @@ const LTCTexturedLightDemo = () =>{
         <LTCAreaLightProxy>
             {/* LTCAreaLight Objects */}
             {vid_tex1 && <LTCAreaLight
+                ref={ltc1Ref}
                 isEnableHelper={true}
                 position={position0} 
                 rotation={rotation0} 
@@ -331,6 +352,7 @@ const LTCTexturedLightDemo = () =>{
             ></LTCAreaLight>}
 
             <LTCAreaLight
+                ref={ltc2Ref}
                 isEnableHelper={true}
                 position={position1} 
                 rotation={rotation1} 
@@ -344,6 +366,7 @@ const LTCTexturedLightDemo = () =>{
             ></LTCAreaLight>
 
             <LTCAreaLight
+                ref={ltc3Ref}
                 isEnableHelper={true}
                 position={position2} 
                 rotation={rotation2} 
@@ -357,6 +380,7 @@ const LTCTexturedLightDemo = () =>{
             ></LTCAreaLight>
 
             <LTCAreaLight
+                ref={ltc4Ref}
                 isEnableHelper={true}
                 position={position3} 
                 rotation={rotation3} 
@@ -370,8 +394,15 @@ const LTCTexturedLightDemo = () =>{
             ></LTCAreaLight>
 
             {/* 3D Objects */}
-            <mesh ref={dragonRef} position={[0,0.5,0]} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
-   
+            {isControlEnabled && <TransformControls mode="translate" enabled={isControlEnabled} object={dragonRef.current}/>}
+            <mesh ref={dragonRef} 
+                    position={[0,0,0]} 
+                    castShadow 
+                    receiveShadow 
+                    onClick={(e)=>{setControlEnabled(!isControlEnabled)}}
+                    geometry={nodes.dragon.geometry} 
+                    material={materials['Default OBJ.001']}
+                     dispose={null} />
             <Plane args={[100, 100]} rotation={[-Math.PI / 2, 0, 0]}>
                 <meshStandardMaterial 
                     color="#ffffff" 
@@ -380,6 +411,8 @@ const LTCTexturedLightDemo = () =>{
                 />
             </Plane>
         </LTCAreaLightProxy>
+        
+        <OrbitControls enabled={!isControlEnabled}></OrbitControls>
         </Suspense>
         </>
     )
@@ -389,14 +422,6 @@ const LTCTexturedLightDemo = () =>{
 
 export const Effect = (props:any) =>{
 
-    // *** Utils 
-    const {auto_rotate} = useControls('Utils',{
-        auto_rotate:{
-            value:true,
-        },
-    }) as {
-        auto_rotate:boolean,
-    }
 
     return(
       <>
@@ -408,7 +433,6 @@ export const Effect = (props:any) =>{
             <ambientLight intensity={0.015}></ambientLight>
             <color attach="background" args={['#000000']} />
             <LTCTexturedLightDemo/>
-            <OrbitControls autoRotate={auto_rotate}></OrbitControls>
           </Canvas>
       </>
   

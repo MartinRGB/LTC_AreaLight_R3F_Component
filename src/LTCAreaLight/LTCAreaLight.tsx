@@ -337,10 +337,12 @@ ref: React.ForwardedRef<any>
                 ,DKUpSceneB)
             }
             {/* The Hacking of Rect AreaLight -> LTC Area Light */}
-            <rectAreaLight
-                ref={mergeRefs([ref,rectAreaLightRef])}
+            <group ref={ref}
                 rotation={rotation?[rotation[0],rotation[1],rotation[2]]:[0,0,0]}
                 position={position?position:[0,0,0]}
+            >
+            <rectAreaLight
+                ref={rectAreaLightRef}
                 width={width?width:4}
                 height={height?height:4}
                 color={color?color:'white'}
@@ -350,8 +352,6 @@ ref: React.ForwardedRef<any>
             {/* LTC Area Light Helper -> Screen */}
             {isEnableHelper && <Plane 
                 args={[width?width:4,height?height:4]} 
-                rotation={rotation?[rotation[0],rotation[1],rotation[2]]:[0,0,0]}
-                position={position?position:[0,0,0]}
                 
             >
        
@@ -361,7 +361,7 @@ ref: React.ForwardedRef<any>
                     color={color?color:'white'} 
                     map={texture} />
             </Plane>}
-
+            </group>
         </>
     )
 })
