@@ -3,10 +3,21 @@
 [live preview](https://martinrgb.github.io/LTC_AreaLight_R3F_Component/)
 
 
+There are three ways to implement LTC Arealight in Three.JS
+
+1. modify the Three.JS engine and compile it
+
+2. Hack the RectAreaLight related shader for all 3D Objects in onBeforeCompile
+
+3. Write your own shaderMaterial and consider all cases
+
+This Repo uses the second method.
+
+
 ## How to use
 
 1. import `LTCAreaLight` & `LTCAreaLightProxy`
-2. 
+
 ```tsx
 import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
 ```
