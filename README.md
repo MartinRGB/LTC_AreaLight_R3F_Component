@@ -27,7 +27,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
 ```tsx
 {/* LTCAreaLightProxy contains LTCAreaLight Objects & 3D Objects */}
 <LTCAreaLightProxy>
-    {LTCAreaLight Objects}
+    {/* LTCAreaLight Objects */}
     <LTCAreaLight
         ref={ltc3Ref}  // ref
         isEnableHelper={true} // is Enable Visual Helper
@@ -42,8 +42,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
         doubleSide={true} // is enable 'DoubleSide' or not
         clipless={false} // is enable 'Clipless Approximation' or not
     ></LTCAreaLight>
-    {/* 3D Objects */}
-    {...}
+    {/* 3D Objects Below */}
 </LTCAreaLightProxy>
 ```
 
