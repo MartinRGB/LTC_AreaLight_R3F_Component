@@ -260,52 +260,52 @@ const LTCTexturedLightDemo = () =>{
         height2:number,
     }
 
-    // *** Video2 AreaLight Properties
-    var {position3,rotation3,color3,intensity3,width3,height3} = useControls('Video2 LTC AreaLight',{
+    // // *** Video2 AreaLight Properties
+    // var {position3,rotation3,color3,intensity3,width3,height3} = useControls('Video2 LTC AreaLight',{
 
-        position3:{
-            value:[0,3,7],
-            label:'Position',
-        },
-        rotation3:{
-            value:[0,0,0],
-            step:0.1,
-            label:'Rotation',
-        },
-        color3:{
-            value:'#ffffff',
-            label:'Color',
-        },
+    //     position3:{
+    //         value:[0,3,7],
+    //         label:'Position',
+    //     },
+    //     rotation3:{
+    //         value:[0,0,0],
+    //         step:0.1,
+    //         label:'Rotation',
+    //     },
+    //     color3:{
+    //         value:'#ffffff',
+    //         label:'Color',
+    //     },
 
-        intensity3:{
-            value:15,
-            min:0.01,
-            max:100.0,
-            step:0.01,
-            label:'Intensity',
-        },
-        width3:{
-            value:6.4,
-            min:0.01,
-            max:100.0,
-            step:0.01,
-            label:'Width',
-        },
-        height3:{
-            value:4,
-            min:0.01,
-            max:100.0,
-            step:0.01,
-            label:'Height',
-        },
-    }) as {
-        position3:[number,number,number],
-        rotation3:[number,number,number],
-        color3:string
-        intensity3:number,
-        width3:number,
-        height3:number,
-    }
+    //     intensity3:{
+    //         value:15,
+    //         min:0.01,
+    //         max:100.0,
+    //         step:0.01,
+    //         label:'Intensity',
+    //     },
+    //     width3:{
+    //         value:6.4,
+    //         min:0.01,
+    //         max:100.0,
+    //         step:0.01,
+    //         label:'Width',
+    //     },
+    //     height3:{
+    //         value:4,
+    //         min:0.01,
+    //         max:100.0,
+    //         step:0.01,
+    //         label:'Height',
+    //     },
+    // }) as {
+    //     position3:[number,number,number],
+    //     rotation3:[number,number,number],
+    //     color3:string
+    //     intensity3:number,
+    //     width3:number,
+    //     height3:number,
+    // }
     
 
     // TODO: Remove 3D Objects from Proxy
@@ -355,7 +355,7 @@ const LTCTexturedLightDemo = () =>{
                 doubleSide={true}
             ></LTCAreaLight>
 
-            <LTCAreaLight
+            {/* <LTCAreaLight
                 isEnableHelper={true}
                 position={position3} 
                 rotation={rotation3} 
@@ -366,7 +366,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={vid_tex2}
                 blurSize={64}
                 doubleSide={true}
-            ></LTCAreaLight>
+            ></LTCAreaLight> */}
 
             {/* 3D Objects */}
             <mesh ref={dragonRef} position={[0,0.5,0]} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
