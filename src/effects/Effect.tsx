@@ -74,8 +74,8 @@ const LTCTexturedLightDemo = () =>{
         vidTex.minFilter = THREE.NearestFilter;
         vidTex.magFilter = THREE.LinearFilter;
         vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
-        //callback(vidTex)
-        setVidTexture1(vidTex);
+        callback(vidTex)
+        //setVidTexture1(vidTex);
     }
 
     useEffect(()=>{
