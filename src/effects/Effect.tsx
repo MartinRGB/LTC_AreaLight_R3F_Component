@@ -31,7 +31,7 @@ const LTCTexturedLightDemo = () =>{
     // *** Load Video Texture 
     // *** from 'Animating textures in WebGL'
     // *** https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Animating_textures_in_WebGL
-    const setupVideo = (src:string,callback?:(tex:THREE.Texture)=>void) =>{
+    const setupVideo = (src:string,callback:(tex:THREE.Texture)=>void) =>{
         const videoE = document.createElement('video');
         videoE.src = 'src';
         videoE.crossOrigin = 'Anonymous'
