@@ -79,9 +79,9 @@ const LTCTexturedLightDemo = () =>{
     }
 
     useEffect(()=>{
-        setupVideo(videoUrl1)
-        // setupVideo(videoUrl1,(tex:THREE.Texture)=>{setVidTexture1(tex)})
-        // setupVideo(videoUrl2,(tex:THREE.Texture)=>{setVidTexture2(tex)})
+        //setupVideo(videoUrl1)
+        setupVideo(videoUrl1,(tex:THREE.Texture)=>{setVidTexture1(tex)})
+        setupVideo(videoUrl2,(tex:THREE.Texture)=>{setVidTexture2(tex)})
     },[])
 
     useFrame((state, delta) => {
