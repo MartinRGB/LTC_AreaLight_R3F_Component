@@ -71,7 +71,6 @@ ref: React.ForwardedRef<any>
                 childrenRef.current.traverse((obj:any)=>{
                     if(obj.isMesh){
                         obj.material.onBeforeCompile = (shader:any) => {
-                            console.log(texArrRef.current)
                             shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
                             shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
                             shader.uniforms.isDoubleSides = { value:texIsDoubleSide.current};
@@ -220,19 +219,11 @@ ref: React.ForwardedRef<any>
     useEffect(()=>{
         if(rectAreaLightRef.current){
             rectAreaLightRef.current.isDoubleSide = doubleSide?doubleSide:false;
+            
         }
     },[rectAreaLightRef])
 
-
-    useEffect(()=>{
-            //TODO: Img in UseEffect,Vid in UseFrame
-            // if(TextureType === 'Texture' && texture){
-            //     DualKawaseBlurPass(texture)
-            // }
-
-    },[texture])
-
-
+    //TODO: Img in UseEffect,Vid in UseFrame
     useFrame(() => {
         
             if((TextureType === 'VideoTexture' || TextureType === 'Texture') && texture){
