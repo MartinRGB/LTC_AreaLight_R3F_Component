@@ -30,7 +30,8 @@ ref: React.ForwardedRef<any>
 
     const texArrRef = useRef<(THREE.Texture | null)[]>([]);
     const texEnableArrRef = useRef<boolean[]>([]);
-    const texIsDoubleSide = useRef<boolean[]>([]);
+    const texIsDoubleSideArrRef = useRef<boolean[]>([]);
+    const texIsCliplessArrRef = useRef<boolean[]>([]);
     const [texIsPrepared,SetTexIsPrepared] = useState<boolean>(false);
 
 
@@ -45,7 +46,8 @@ ref: React.ForwardedRef<any>
             if(childrenRef.current){
                 texArrRef.current = [];
                 texEnableArrRef.current=[];
-                texIsDoubleSide.current=[];
+                texIsDoubleSideArrRef.current=[];
+                texIsCliplessArrRef.current=[];
                 SetTexIsPrepared(false);                
                 childrenRef.current.traverse((obj:any)=>{
                     if(obj.isRectAreaLight){
@@ -57,7 +59,8 @@ ref: React.ForwardedRef<any>
                             texEnableArrRef.current.push(false);
                             texArrRef.current.push(null);
                         }
-                        texIsDoubleSide.current.push(obj.isDoubleSide);
+                        texIsDoubleSideArrRef.current.push(obj.isDoubleSide);
+                        texIsCliplessArrRef.current.push(obj.isClipless);
                     }
 
                 })
@@ -73,7 +76,9 @@ ref: React.ForwardedRef<any>
                         obj.material.onBeforeCompile = (shader:any) => {
                             shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
                             shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
-                            shader.uniforms.isDoubleSides = { value:texIsDoubleSide.current};
+                            shader.uniforms.isDoubleSides = { value:texIsDoubleSideArrRef.current};
+                            shader.uniforms.isCliplesses = { value:texIsCliplessArrRef.current};
+                            
 
                             shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_pars_begin>`,
                             HACKED_LIGHTS_PARS_BEGIN
@@ -119,6 +124,7 @@ export const LTCAreaLight = React.forwardRef(({
     intensity,
     blurSize,
     doubleSide,
+    clipless,
 }:{
     position?: [number, number, number];
     rotation?: [number, number, number];
@@ -130,6 +136,7 @@ export const LTCAreaLight = React.forwardRef(({
     height?: number;
     blurSize?:number;
     doubleSide?:boolean;
+    clipless?:boolean;
 },
 ref: React.ForwardedRef<any>
 ) => {
@@ -219,7 +226,7 @@ ref: React.ForwardedRef<any>
     useEffect(()=>{
         if(rectAreaLightRef.current){
             rectAreaLightRef.current.isDoubleSide = doubleSide?doubleSide:false;
-            
+            rectAreaLightRef.current.isClipless = clipless?clipless:true;
         }
     },[rectAreaLightRef])
 

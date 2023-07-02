@@ -323,7 +323,6 @@ export const LTC_AREALIGHT_CORE=`
 const float LUT_SIZE  = 64.0;
 const float LUT_SCALE = (LUT_SIZE - 1.0)/LUT_SIZE;
 const float LUT_BIAS  = 0.5/LUT_SIZE;
-#define clipless true
 #define blurItrRepeats 2.
 
 // *** Linearly Transformed Cosines ***
@@ -624,7 +623,8 @@ vec3 LTC_Evaluate_SelfShadow(
     vec3 points[4], 
     bool twoSided, 
     sampler2D tex,
-    bool isTextured
+    bool isTextured,
+	bool clipless
 )
 {
     // construct orthonormal basis around N
@@ -880,7 +880,7 @@ uniform sampler2D ltc_tex;
 
 #if NUM_RECT_AREA_LIGHTS > 0
 
-	void RE_Direct_RectArea_Physical( const in RectAreaLight rectAreaLight, const in GeometricContext geometry, const in PhysicalMaterial material,const in sampler2D rectAreaLightTex,const in bool enableRectAreaLightTexture,const in bool doubleSide, inout ReflectedLight reflectedLight ) {
+	void RE_Direct_RectArea_Physical( const in RectAreaLight rectAreaLight, const in GeometricContext geometry, const in PhysicalMaterial material,const in sampler2D rectAreaLightTex,const in bool enableRectAreaLightTexture,const in bool doubleSide,const in bool clipless,inout ReflectedLight reflectedLight ) {
 
 		vec3 normal = geometry.normal;
 		vec3 viewDir = geometry.viewDir;
@@ -925,11 +925,11 @@ uniform sampler2D ltc_tex;
 
         vec3 fresnel = ( material.specularColor * t2.x + ( vec3( 1.0 ) - material.specularColor ) * t2.y );
 
-        vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, doubleSide,rectAreaLightTex,enableRectAreaLightTexture);
+        vec3 spec = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, Minv, rectCoords, doubleSide,rectAreaLightTex,enableRectAreaLightTexture,clipless);
         //spec *= lightColor*t2.x + (1.0 - lightColor)*t2.y; // lighterVersion
         spec *= lightColor * 0.5 * fresnel;
 
-        vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, doubleSide,rectAreaLightTex,enableRectAreaLightTexture);
+        vec3 diff = LTC_Evaluate_SelfShadow(m_roughness,normal, viewDir, position, mat3(1), rectCoords, doubleSide,rectAreaLightTex,enableRectAreaLightTexture,clipless);
         diff *= lightColor * material.diffuseColor;
 
         reflectedLight.directSpecular += spec ;
@@ -1236,6 +1236,7 @@ float getSpotAttenuation( const in float coneCosine, const in float penumbraCosi
     uniform sampler2D rectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 	uniform RectAreaLight rectAreaLights[ NUM_RECT_AREA_LIGHTS ];
 	uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
+	uniform bool isCliplesses[ NUM_RECT_AREA_LIGHTS ];
 	uniform bool isDoubleSides[ NUM_RECT_AREA_LIGHTS ];
 
 #endif
@@ -1418,7 +1419,7 @@ IncidentLight directLight;
 
 		rectAreaLight = rectAreaLights[ i ];
         // *** Hack the RectAreaLight Textures ***
-		RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ],enableRectAreaLightTextures[i],isDoubleSides[i],reflectedLight );
+		RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ],enableRectAreaLightTextures[i],isDoubleSides[i],isCliplesses[i],reflectedLight );
 
 	}
 	#pragma unroll_loop_end

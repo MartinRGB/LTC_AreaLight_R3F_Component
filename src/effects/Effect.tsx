@@ -349,6 +349,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={vid_tex1}
                 blurSize={64}
                 doubleSide={true}
+                clipless={false}
             ></LTCAreaLight>}
 
             <LTCAreaLight
@@ -363,6 +364,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={img_tex}
                 blurSize={64}
                 doubleSide={true}
+                clipless={true}
             ></LTCAreaLight>
 
             <LTCAreaLight
@@ -377,6 +379,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={null}
                 blurSize={64}
                 doubleSide={true}
+                clipless={true}
             ></LTCAreaLight>
 
             <LTCAreaLight
@@ -391,6 +394,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={vid_tex2}
                 blurSize={64}
                 doubleSide={true}
+                clipless={true}
             ></LTCAreaLight>
 
             {/* 3D Objects */}
