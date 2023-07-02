@@ -5,11 +5,11 @@
 
 There are three ways to implement LTC Arealight in Three.JS
 
-1. modify the Three.JS engine and compile it
+1. modify the Three.JS engine and compile it -> [TextureAreaLight_ThreeJS](https://github.com/MartinRGB/TextureAreaLight_ThreeJS)
 
-2. Hack the RectAreaLight related shader for all 3D Objects in onBeforeCompile
+2. Hack the RectAreaLight related shader for all 3D Objects in onBeforeCompile -> this repo
 
-3. Write your own shaderMaterial and consider all cases
+3. Write your own shaderMaterial and consider all cases  -> [WebGL implemetation](https://martinrgb.github.io/ltc_code_videoTexture/)
 
 This Repo uses the second method.
 
