@@ -1,7 +1,7 @@
-import { Box, OrbitControls, Plane, SpotLight, shaderMaterial, useDepthBuffer, useGLTF } from "@react-three/drei"
-import { Canvas, useThree, useFrame, createPortal, useLoader, invalidate } from "@react-three/fiber"
+import { Box, OrbitControls, Plane, shaderMaterial, useDepthBuffer, useGLTF } from "@react-three/drei"
+import { Canvas, useThree, useFrame, createPortal, useLoader } from "@react-three/fiber"
 import { useControls } from "leva";
-import {  useEffect, useMemo, useRef, useState } from "react";
+import {  useEffect, useMemo, useRef, useState,Suspense } from "react";
 import * as THREE from 'three'
 import { Perf } from "r3f-perf";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
@@ -32,6 +32,7 @@ ref: React.ForwardedRef<any>
 
     const texArrRef = useRef<any>([]);
     const texEnableArrRef = useRef<any>([]);
+    const texIsDoubleSide = useRef<any>([]);
     const [texIsPrepared,SetTexIsPrepared] = useState<boolean>(false);
 
     useEffect(()=>{
@@ -45,6 +46,7 @@ ref: React.ForwardedRef<any>
             if(childrenRef.current){
                 texArrRef.current = [];
                 texEnableArrRef.current=[];
+                texIsDoubleSide.current=[];
                 SetTexIsPrepared(false);                
                 childrenRef.current.traverse((obj:any)=>{
                     if(obj.isRectAreaLight){
@@ -56,6 +58,7 @@ ref: React.ForwardedRef<any>
                             texEnableArrRef.current.push(false);
                             texArrRef.current.push(null);
                         }
+                        texIsDoubleSide.current.push(obj.isDoubleSide);
                     }
 
                 })
@@ -72,6 +75,7 @@ ref: React.ForwardedRef<any>
                             console.log(texArrRef.current)
                             shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
                             shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
+                            shader.uniforms.isDoubleSides = { value:texIsDoubleSide.current};
 
                             shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_pars_begin>`,
                             HACKED_LIGHTS_PARS_BEGIN
@@ -116,6 +120,7 @@ const LTCAreaLight = React.forwardRef(({
     color,
     intensity,
     blurSize,
+    doubleSide,
     index,
     dst,
 
@@ -129,6 +134,7 @@ const LTCAreaLight = React.forwardRef(({
     width?: number;
     height?: number;
     blurSize?:number;
+    doubleSide?:boolean;
     index?:number;
     dst?:THREE.WebGLRenderTarget;
 
@@ -223,6 +229,11 @@ ref: React.ForwardedRef<any>
     }
 
 
+    useEffect(()=>{
+        if(rectAreaLightRef.current){
+            rectAreaLightRef.current.isDoubleSide = doubleSide?doubleSide:false;
+        }
+    },[rectAreaLightRef])
 
 
     useEffect(()=>{
@@ -357,9 +368,12 @@ ref: React.ForwardedRef<any>
                 position={position?position:[0,0,0]}
                 
             >
-                {/* <meshBasicMaterial ref={rectAreLightHelperRef} color={color?color:'white'} /> */}
        
-                <meshBasicMaterial ref={rectAreLightHelperRef} color={color?color:'white'} map={texture} />
+                <meshBasicMaterial 
+                    ref={rectAreLightHelperRef} 
+                    side={doubleSide?THREE.DoubleSide:THREE.FrontSide}
+                    color={color?color:'white'} 
+                    map={texture} />
             </Plane>}
 
         </>
@@ -367,7 +381,6 @@ ref: React.ForwardedRef<any>
 })
 
 LTCAreaLight.displayName = 'LTCAreaLight'
-
 
 const LTCTexturedLightDemo = () =>{
 
@@ -438,7 +451,6 @@ const LTCTexturedLightDemo = () =>{
     useEffect(()=>{
         setupVideo(videoUrl)
     },[])
-
 
     // *** Object Material Properties
     const {floor_roughness,dragon_roughness} = useControls('Object Material',{
@@ -518,7 +530,7 @@ const LTCTexturedLightDemo = () =>{
     // *** Image AreaLight Properties
     var {position1,rotation1,color1,intensity1,width1,height1} = useControls('Image LTC AreaLight',{
         position1:{
-            value:[10,3,0],
+            value:[8,3,0],
             label:'Position',
         },
         rotation1:{
@@ -539,7 +551,7 @@ const LTCTexturedLightDemo = () =>{
             label:'Intensity',
         },
         width1:{
-            value:6.4,
+            value:4,
             min:0.01,
             max:100.0,
             step:0.01,
@@ -565,7 +577,7 @@ const LTCTexturedLightDemo = () =>{
     var {position2,rotation2,color2,intensity2,width2,height2} = useControls('Color LTC AreaLight',{
 
         position2:{
-            value:[-10,3,0],
+            value:[-8,3,0],
             label:'Position',
         },
         rotation2:{
@@ -579,14 +591,14 @@ const LTCTexturedLightDemo = () =>{
         },
 
         intensity2:{
-            value:15,
+            value:5,
             min:0.01,
             max:100.0,
             step:0.01,
             label:'Intensity',
         },
         width2:{
-            value:6.4,
+            value:4,
             min:0.01,
             max:100.0,
             step:0.01,
@@ -612,10 +624,21 @@ const LTCTexturedLightDemo = () =>{
     const floorMap = useLoader(THREE.TextureLoader,'./floor2.jpg');
     floorMap.repeat.set(20,20);
     floorMap.wrapS = floorMap.wrapT = THREE.RepeatWrapping;
+
+    useFrame((state, delta) => {
+        const time = state.clock.getElapsedTime();
+        if(dragonRef.current){
+            dragonRef.current.rotation.y += 0.01;
+            dragonRef.current.position.y = 1. + Math.sin(time);
+            dragonRef.current.position.x = Math.cos(time);
+        }
+    },)
     
 
     return(
         <>
+        
+        <Suspense fallback={null}>
         <LTCAreaLightProxy>
             <LTCAreaLight
                 isEnableHelper={true}
@@ -639,6 +662,7 @@ const LTCTexturedLightDemo = () =>{
                 intensity={intensity1}
                 texture={img_tex}
                 blurSize={64}
+                doubleSide={true}
             ></LTCAreaLight>
 
             <LTCAreaLight
@@ -651,6 +675,7 @@ const LTCTexturedLightDemo = () =>{
                 intensity={intensity2}
                 texture={null}
                 blurSize={64}
+                doubleSide={true}
             ></LTCAreaLight>
             <mesh ref={dragonRef} position={[0,0.5,0]} castShadow receiveShadow geometry={nodes.dragon.geometry} material={materials['Default OBJ.001']} dispose={null} />
    
@@ -662,6 +687,7 @@ const LTCTexturedLightDemo = () =>{
                 />
             </Plane>
         </LTCAreaLightProxy>
+        </Suspense>
         </>
     )
     
@@ -670,17 +696,27 @@ const LTCTexturedLightDemo = () =>{
 
 export const Effect = (props:any) =>{
 
+    
+    // *** Utils 
+    const {auto_rotate} = useControls('Utils',{
+        auto_rotate:{
+            value:true,
+        },
+    }) as {
+        auto_rotate:boolean,
+    }
+
     return(
       <>
           <Canvas 
-            camera={{ position: [0, 1, 8], fov: 50, near: 0.1, far: 1000 }}
+            camera={{ position: [0, 15, 35], fov: 50, near: 0.1, far: 1000 }}
             className={props.className} 
             style={{...props.style}}>
             <Perf style={{position:'absolute',top:'10px',left:'10px',width:'360px',borderRadius:'10px'}}/>
             <ambientLight intensity={0.015}></ambientLight>
             <color attach="background" args={['#202020']} />
             <LTCTexturedLightDemo/>
-            <OrbitControls></OrbitControls>
+            <OrbitControls autoRotate={auto_rotate}></OrbitControls>
           </Canvas>
       </>
   
