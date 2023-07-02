@@ -226,16 +226,16 @@ ref: React.ForwardedRef<any>
 
     useEffect(()=>{
             //TODO: Img in UseEffect,Vid in UseFrame
-            // if(TextureType === 'Texture' && texture){
-            //     DualKawaseBlurPass(texture)
-            // }
+            if(TextureType != 'Null' && TextureType != 'VideoTexture' && texture){
+                DualKawaseBlurPass(texture)
+            }
 
     },[texture])
 
 
     useFrame(() => {
         
-            if((TextureType === 'VideoTexture' || TextureType === 'Texture') && texture){
+            if((TextureType === 'VideoTexture') && texture){
                 DualKawaseBlurPass(texture)
             }
     
