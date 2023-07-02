@@ -13,6 +13,7 @@ const LTCTexturedLightDemo = () =>{
     // Init model
     const { nodes, materials }:any = useGLTF('./model.gltf')
     const dragonRef = useRef<any>();
+    const roomRef = useRef<any>();
     const ltc1Ref = useRef<any>();
     const ltc2Ref = useRef<any>();
     const ltc3Ref = useRef<any>();
@@ -94,30 +95,63 @@ const LTCTexturedLightDemo = () =>{
             dragonRef.current.rotation.y += 0.01;
         }
         if(ltc1Ref.current){
-            ltc1Ref.current.position.x = 5.* Math.sin(time);
+            //ltc1Ref.current.position.x = 5.* Math.sin(time);
         }
 
         if(ltc2Ref.current){
-            ltc2Ref.current.position.y =  2.* Math.sin(time);
+            //ltc2Ref.current.position.y =  2.* Math.sin(time);
         }
 
         if(ltc3Ref.current){
-            ltc3Ref.current.position.y =  2.* Math.cos(time);
+            //ltc3Ref.current.position.y =  2.* Math.cos(time);
         }
 
         if(ltc4Ref.current){
-            ltc4Ref.current.rotation.y += 0.02;
+            //ltc4Ref.current.rotation.y += 0.02;
         }
     },)
 
     
-    const [isControlEnabled,setControlEnabled] = useState(true)
+    const [isControlEnabled,setControlEnabled] = useState(false)
+    
+
+    function Hall({ ...props }) {
+        const { scene } = useGLTF('./vr_gallery_test.glb')
+        
+        useEffect(()=>{
+            console.log(scene.children[0].children[0].children)
+
+            scene.children[0].children[0].children.forEach((obj:any)=>{
+                console.log(obj.material.roughness)
+                obj.material.roughness = 1.;
+            })
+            
+        },[])
+        return <primitive object={scene} {...props} />
+    }
+
+    function Mirror({ ...props }) {
+        const mirror = useGLTF('./mirror_b.glb')
+        
+        return <primitive object={mirror.scene} {...props} />
+    }
+
+    // *** Utils
+    const {auto_rotate} = useControls('Utils',{
+  
+        auto_rotate:{
+            value:true,
+        },
+
+    }) as {
+        auto_rotate:boolean,
+    }
 
     // *** Object Material Properties
     const {floor_roughness,dragon_roughness} = useControls('Object Material',{
   
         floor_roughness:{
-            value:0.5,
+            value:0.2,
             min:0.0,
             max:10.0,
         },
@@ -145,7 +179,7 @@ const LTCTexturedLightDemo = () =>{
     // *** Video1 AreaLight Properties
     const {position0,rotation0,color0,intensity0,width0,height0} = useControls('Video1 LTC AreaLight',{
         position0:{
-            value:[0,2,-9],
+            value:[0,2.5,-9],
             label:'Position',
         },
         rotation0:{
@@ -191,7 +225,7 @@ const LTCTexturedLightDemo = () =>{
     // *** Image AreaLight Properties
     const {position1,rotation1,color1,intensity1,width1,height1} = useControls('Image LTC AreaLight',{
         position1:{
-            value:[8,2,0],
+            value:[8,2.5,0],
             label:'Position',
         },
         rotation1:{
@@ -238,7 +272,7 @@ const LTCTexturedLightDemo = () =>{
     const {position2,rotation2,color2,intensity2,width2,height2} = useControls('Color LTC AreaLight',{
 
         position2:{
-            value:[-8,2,0],
+            value:[-8,2.5,0],
             label:'Position',
         },
         rotation2:{
@@ -281,52 +315,76 @@ const LTCTexturedLightDemo = () =>{
         height2:number,
     }
 
-    // // *** Video2 AreaLight Properties
-    const {position3,rotation3,color3,intensity3,width3,height3} = useControls('Video2 LTC AreaLight',{
+    // *** Video2 AreaLight Properties
+    // const {position3,rotation3,color3,intensity3,width3,height3} = useControls('Video2 LTC AreaLight',{
 
-        position3:{
-            value:[0,2,9],
+    //     position3:{
+    //         value:[0,2.5,9],
+    //         label:'Position',
+    //     },
+    //     rotation3:{
+    //         value:[0,0,0],
+    //         step:0.1,
+    //         label:'Rotation',
+    //     },
+    //     color3:{
+    //         value:'#ffffff',
+    //         label:'Color',
+    //     },
+
+    //     intensity3:{
+    //         value:15,
+    //         min:0.01,
+    //         max:100.0,
+    //         step:0.01,
+    //         label:'Intensity',
+    //     },
+    //     width3:{
+    //         value:6.4,
+    //         min:0.01,
+    //         max:100.0,
+    //         step:0.01,
+    //         label:'Width',
+    //     },
+    //     height3:{
+    //         value:4,
+    //         min:0.01,
+    //         max:100.0,
+    //         step:0.01,
+    //         label:'Height',
+    //     },
+    // }) as {
+    //     position3:[number,number,number],
+    //     rotation3:[number,number,number],
+    //     color3:string
+    //     intensity3:number,
+    //     width3:number,
+    //     height3:number,
+    // }
+
+    const {position4,rotation4,scale4} = useControls('Room Props',{
+        position4:{
+            value:[0,0,-1],
             label:'Position',
+            step:0.001,
         },
-        rotation3:{
+        rotation4:{
             value:[0,0,0],
             step:0.1,
             label:'Rotation',
         },
-        color3:{
-            value:'#ffffff',
-            label:'Color',
+        scale4:{
+            value:[1.2,2.0,1.2],
+            label:'Scale',
+            step:0.001,
         },
 
-        intensity3:{
-            value:15,
-            min:0.01,
-            max:100.0,
-            step:0.01,
-            label:'Intensity',
-        },
-        width3:{
-            value:6.4,
-            min:0.01,
-            max:100.0,
-            step:0.01,
-            label:'Width',
-        },
-        height3:{
-            value:4,
-            min:0.01,
-            max:100.0,
-            step:0.01,
-            label:'Height',
-        },
     }) as {
-        position3:[number,number,number],
-        rotation3:[number,number,number],
-        color3:string
-        intensity3:number,
-        width3:number,
-        height3:number,
+        position4:[number,number,number],
+        rotation4:[number,number,number],
+        scale4:[number,number,number]
     }
+
 
 
     // TODO: Remove 3D Objects from Proxy
@@ -337,7 +395,7 @@ const LTCTexturedLightDemo = () =>{
         {/* LTCAreaLightProxy contains LTCAreaLight Objects & 3D Objects */}
         <LTCAreaLightProxy>
             {/* LTCAreaLight Objects */}
-            {vid_tex1 && <LTCAreaLight
+            <LTCAreaLight
                 ref={ltc1Ref}
                 isEnableHelper={true}
                 position={position0} 
@@ -350,7 +408,7 @@ const LTCTexturedLightDemo = () =>{
                 blurSize={64}
                 doubleSide={true}
                 clipless={false}
-            ></LTCAreaLight>}
+            ></LTCAreaLight>
 
             <LTCAreaLight
                 ref={ltc2Ref}
@@ -364,7 +422,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={img_tex}
                 blurSize={64}
                 doubleSide={true}
-                clipless={true}
+                clipless={false}
             ></LTCAreaLight>
 
             <LTCAreaLight
@@ -379,10 +437,10 @@ const LTCTexturedLightDemo = () =>{
                 texture={null}
                 blurSize={64}
                 doubleSide={true}
-                clipless={true}
+                clipless={false}
             ></LTCAreaLight>
 
-            <LTCAreaLight
+            {/* <LTCAreaLight
                 ref={ltc4Ref}
                 isEnableHelper={true}
                 position={position3} 
@@ -395,10 +453,14 @@ const LTCTexturedLightDemo = () =>{
                 blurSize={64}
                 doubleSide={true}
                 clipless={true}
-            ></LTCAreaLight>
+            ></LTCAreaLight> */}
 
             {/* 3D Objects */}
+            
             {isControlEnabled && <TransformControls mode="translate" enabled={isControlEnabled} object={dragonRef.current}/>}
+            <Hall position={position4} scale={scale4} rotation={rotation4}/>
+
+            <Mirror position={[0,-8.,9]} scale={[8.0,8.0,8.0]} rotation={[0,-Math.PI,0]}/>
             <mesh ref={dragonRef} 
                     position={[0,0,0]} 
                     castShadow 
@@ -407,16 +469,9 @@ const LTCTexturedLightDemo = () =>{
                     geometry={nodes.dragon.geometry} 
                     material={materials['Default OBJ.001']}
                      dispose={null} />
-            <Plane args={[100, 100]} rotation={[-Math.PI / 2, 0, 0]}>
-                <meshStandardMaterial 
-                    color="#ffffff" 
-                    roughness={floor_roughness} 
-                    map={floorMap}
-                />
-            </Plane>
         </LTCAreaLightProxy>
         
-        <OrbitControls enabled={!isControlEnabled}></OrbitControls>
+        <OrbitControls autoRotate={auto_rotate} enabled={!isControlEnabled}></OrbitControls>
         </Suspense>
         </>
     )
@@ -430,7 +485,7 @@ export const Effect = (props:any) =>{
     return(
       <>
           <Canvas 
-            camera={{ position: [0, 15, 35], fov: 50, near: 0.1, far: 1000 }}
+            camera={{ position: [0, 5, 30], fov: 50, near: 0.1, far: 1000 }}
             className={props.className} 
             style={{...props.style}}>
             <Perf style={{position:'absolute',top:'10px',left:'10px',width:'360px',borderRadius:'10px'}}/>
