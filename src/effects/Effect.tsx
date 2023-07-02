@@ -31,7 +31,7 @@ const LTCTexturedLightDemo = () =>{
     // *** Load Video Texture 
     // *** from 'Animating textures in WebGL'
     // *** https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Animating_textures_in_WebGL
-    const setupVideo = (src:string,callback:(tex:THREE.Texture)=>void) =>{
+    const setupVideo = (src:string,callback?:(tex:THREE.Texture)=>void) =>{
         const videoE = document.createElement('video');
         videoE.src = 'src';
         videoE.crossOrigin = 'Anonymous'
@@ -74,13 +74,14 @@ const LTCTexturedLightDemo = () =>{
         vidTex.minFilter = THREE.NearestFilter;
         vidTex.magFilter = THREE.LinearFilter;
         vidTex.wrapS = vidTex.wrapT = THREE.ClampToEdgeWrapping;
-        callback(vidTex)
-
+        //callback(vidTex)
+        setVidTexture1(vidTex);
     }
 
     useEffect(()=>{
-        setupVideo(videoUrl1,(tex:THREE.Texture)=>{setVidTexture1(tex)})
-        setupVideo(videoUrl2,(tex:THREE.Texture)=>{setVidTexture2(tex)})
+        setupVideo(videoUrl1)
+        // setupVideo(videoUrl1,(tex:THREE.Texture)=>{setVidTexture1(tex)})
+        // setupVideo(videoUrl2,(tex:THREE.Texture)=>{setVidTexture2(tex)})
     },[])
 
     useFrame((state, delta) => {
@@ -316,7 +317,7 @@ const LTCTexturedLightDemo = () =>{
         {/* LTCAreaLightProxy contains LTCAreaLight Objects & 3D Objects */}
         <LTCAreaLightProxy>
             {/* LTCAreaLight Objects */}
-            <LTCAreaLight
+            {vid_tex1 && <LTCAreaLight
                 isEnableHelper={true}
                 position={position0} 
                 rotation={rotation0} 
@@ -327,7 +328,7 @@ const LTCTexturedLightDemo = () =>{
                 texture={vid_tex1}
                 blurSize={64}
                 doubleSide={true}
-            ></LTCAreaLight>
+            ></LTCAreaLight>}
 
             <LTCAreaLight
                 isEnableHelper={true}
