@@ -85,6 +85,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
 
  1. In `lights_pars_begin`, add the following uniforms:
     ```glsl
+      uniform sampler2D rectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
       uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
       uniform bool isCliplesses[ NUM_RECT_AREA_LIGHTS ];
       uniform bool isDoubleSides[ NUM_RECT_AREA_LIGHTS ];
