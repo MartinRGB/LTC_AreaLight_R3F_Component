@@ -27,7 +27,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
 <LTCAreaLightProxy>
     {/* LTCAreaLight Objects */}
     <LTCAreaLight
-        ref={ltc3Ref}  // ref
+        ref={ltcRef}  // ref
         isEnableHelper={true} // is Enable Visual Helper
         position={position} 
         rotation={rotation} 
