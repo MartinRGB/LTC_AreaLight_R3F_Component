@@ -37,6 +37,7 @@ import mergeRefs from 'react-merge-refs';
 //     -lights_physical_pars_fragment
 
 // 1. In 'lights_pars_begin', add the following uniforms:
+//      uniform sampler2D rectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 //      uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 //      uniform bool isCliplesses[ NUM_RECT_AREA_LIGHTS ];
 //      uniform bool isDoubleSides[ NUM_RECT_AREA_LIGHTS ];
