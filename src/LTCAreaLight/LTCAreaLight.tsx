@@ -8,6 +8,7 @@ import { RECT_AREALIGHT_PREFIX,LTC_AREALIGHT_CORE,RECT_AREALIGHT_SUFFIX_0,RECT_A
 import { DOWNSAMPLE_BLUR, UPSAMPLE_BLUR } from "./shader/DualKawaseBlur_Shader";
 import { common_vertex_main, prefix_frag, prefix_vertex } from "./shader/Utils";
 import mergeRefs from 'react-merge-refs';
+import { useControls } from "leva";
 
 
 // *** The Process of LTCAreaLight ***
@@ -26,9 +27,12 @@ import mergeRefs from 'react-merge-refs';
 //     - isDoubleSide
 //     - isClipless
 //     - rectAreaLightTexture 
-// 3. Traverse all objects in the scene, and find the 'Mesh' object,
+//     - ...
+// 3. Traverse all objects in the scene, and find the 'Mesh' object (in UseEffect)
 //     - add these properties(in step 2) as uniforms into them:
-//     - modify shaders in onBeforeCompile
+//     - modify shaders in onBeforeCompile,copy shader to obj.userData.shader
+// 4. In 'UseFrame',update the properties of the 'LTCAreaLight' object, and update the uniforms of the 'Mesh' object(by updating userData.shader.uniforms)
+
 
 // *** What the shaders have changed ***
 // The three main shaders in Three.js have been modified
@@ -41,6 +45,7 @@ import mergeRefs from 'react-merge-refs';
 //      uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 //      uniform bool isCliplesses[ NUM_RECT_AREA_LIGHTS ];
 //      uniform bool isDoubleSides[ NUM_RECT_AREA_LIGHTS ];
+//      ...
 
 // 2. In 'lights_fragment_begin', add these uniforms into the 'rectAreaLight' function:
 //      RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ],enableRectAreaLightTextures[i],isDoubleSides[i],isCliplesses[i],reflectedLight );
@@ -63,34 +68,73 @@ ref: React.ForwardedRef<any>
     
     const childrenRef = useRef<THREE.Object3D>();
 
+    const texArrRef = useRef<(THREE.Texture | null)[]>([]);
+    const texEnableArrRef = useRef<boolean[]>([]);
+    const texIsDoubleSideArrRef = useRef<boolean[]>([]);
+    const texIsCliplessArrRef = useRef<boolean[]>([]);
+    const texAddRoughnessArrRef = useRef<number[]>([]);
+    const [texIsPrepared,SetTexIsPrepared] = useState<boolean>(false);
+
+
     // *** Init The LTC Texture ***
 
     const initLTCTexture = () =>{
         RectAreaLightUniformsLib.init();
     }
 
-    const texArrRef = useRef<(THREE.Texture | null)[]>([]);
-    const texEnableArrRef = useRef<boolean[]>([]);
-    const texIsDoubleSideArrRef = useRef<boolean[]>([]);
-    const texIsCliplessArrRef = useRef<boolean[]>([]);
-    const [texIsPrepared,SetTexIsPrepared] = useState<boolean>(false);
 
 
     useEffect(()=>{
-        initLTCTexture();
+        if(childrenRef.current){
+
+            initLTCTexture();
+
+            // *** Init the Fixed Shader ***
+            childrenRef.current.traverse((obj:any)=>{
+                if(obj.isMesh){
+                    obj.material.onBeforeCompile = (shader:any) => {
+                        shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
+                        shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
+                        shader.uniforms.isDoubleSides = { value:texIsDoubleSideArrRef.current};
+                        shader.uniforms.isCliplesses = { value:texIsCliplessArrRef.current};
+                        shader.uniforms.addtionalRoughnesses = {value:texAddRoughnessArrRef.current}
+                        
+                        shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_pars_begin>`,
+                        HACKED_LIGHTS_PARS_BEGIN
+                        )
+
+                        shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_fragment_begin>`,
+                        HACKED_LIGHTS_FRAGMENT_BEGIN
+                        )
+                        shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_physical_pars_fragment>`,
+                        RECT_AREALIGHT_PREFIX
+                        + LTC_AREALIGHT_CORE
+                        + RECT_AREALIGHT_SUFFIX_0
+                        + RECT_AREALIGHT_HACK
+                        + RECT_AREALIGHT_SUFFIX_1
+                        )
+
+                        obj.userData.shader = shader;
+
+                    }   
+                }
+            })
+        }
+
     },[])
 
     useFrame(() => {
 
-        
             
             if(childrenRef.current){
                 texArrRef.current = [];
                 texEnableArrRef.current=[];
                 texIsDoubleSideArrRef.current=[];
                 texIsCliplessArrRef.current=[];
+                texAddRoughnessArrRef.current=[];
                 SetTexIsPrepared(false);                
                 childrenRef.current.traverse((obj:any)=>{
+                    // *** update LTCAreaLight's Properties to the Ref ***
                     if(obj.isRectAreaLight){
                         if(obj.rectAreaLightTexture){
                             texEnableArrRef.current.push(true);
@@ -102,6 +146,21 @@ ref: React.ForwardedRef<any>
                         }
                         texIsDoubleSideArrRef.current.push(obj.isDoubleSide);
                         texIsCliplessArrRef.current.push(obj.isClipless);
+                        texAddRoughnessArrRef.current.push(obj.addtionalRoughness);
+                    }
+
+                    // *** update Mesh's Properties ***
+                    if(obj.isMesh){
+
+                        if(obj.userData.shader ){
+                            // obj.userData.shader.uniforms
+                            const shader = obj.userData.shader;
+                            shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
+                            shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
+                            shader.uniforms.isDoubleSides = { value:texIsDoubleSideArrRef.current};
+                            shader.uniforms.isCliplesses = { value:texIsCliplessArrRef.current};
+                            shader.uniforms.addtionalRoughnesses = {value:texAddRoughnessArrRef.current}
+                        }
                     }
 
                 })
@@ -110,35 +169,6 @@ ref: React.ForwardedRef<any>
 
             }
 
-            if(childrenRef.current && texIsPrepared ){
-
-                childrenRef.current.traverse((obj:any)=>{
-                    if(obj.isMesh){
-                        obj.material.onBeforeCompile = (shader:any) => {
-                            shader.uniforms.enableRectAreaLightTextures = { value: texEnableArrRef.current };
-                            shader.uniforms.rectAreaLightTextures = { value:texArrRef.current};
-                            shader.uniforms.isDoubleSides = { value:texIsDoubleSideArrRef.current};
-                            shader.uniforms.isCliplesses = { value:texIsCliplessArrRef.current};
-                            
-
-                            shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_pars_begin>`,
-                            HACKED_LIGHTS_PARS_BEGIN
-                            )
-
-                            shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_fragment_begin>`,
-                            HACKED_LIGHTS_FRAGMENT_BEGIN
-                            )
-                            shader.fragmentShader = shader.fragmentShader.replace(`#include <lights_physical_pars_fragment>`,
-                            RECT_AREALIGHT_PREFIX
-                            + LTC_AREALIGHT_CORE
-                            + RECT_AREALIGHT_SUFFIX_0
-                            + RECT_AREALIGHT_HACK
-                            + RECT_AREALIGHT_SUFFIX_1
-                            )
-                        }   
-                    }
-                })
-            }
     },)
 
 
@@ -163,6 +193,7 @@ export const LTCAreaLight = React.forwardRef(({
     height,
     color,
     intensity,
+    addtionalRoughness,
     blurSize,
     doubleSide,
     clipless,
@@ -173,6 +204,7 @@ export const LTCAreaLight = React.forwardRef(({
     isEnableHelper?:boolean;
     color?: string;
     intensity?: number;
+    addtionalRoughness?:number;
     width?: number;
     height?: number;
     blurSize?:number;
@@ -268,8 +300,10 @@ ref: React.ForwardedRef<any>
         if(rectAreaLightRef.current){
             rectAreaLightRef.current.isDoubleSide = doubleSide?doubleSide:false;
             rectAreaLightRef.current.isClipless = clipless?clipless:true;
+            rectAreaLightRef.current.addtionalRoughness = addtionalRoughness?addtionalRoughness:0;
         }
-    },[rectAreaLightRef])
+    },[rectAreaLightRef,doubleSide,clipless,addtionalRoughness])
+    
 
     //TODO: Img in UseEffect,Vid in UseFrame
     useFrame(() => {

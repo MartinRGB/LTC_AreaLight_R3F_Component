@@ -13,10 +13,12 @@ const Loader = () => {
   return <Html center>{progress} % loaded</Html>
 }
 
+
 const LTCTexturedLightDemo = () =>{
 
     // Init model
     const { nodes, materials }:any = useGLTF('./model.gltf')
+    const { scene }:any = useGLTF('./vr_gallery_test.glb')
     const dragonRef = useRef<any>();
     const roomRef = useRef<any>();
     const ltc1Ref = useRef<any>();
@@ -120,20 +122,7 @@ const LTCTexturedLightDemo = () =>{
     const [isControlEnabled,setControlEnabled] = useState(false)
     
 
-    function Hall({ ...props }) {
-        const { scene } = useGLTF('./vr_gallery_test.glb')
-        
-        useEffect(()=>{
-            console.log(scene.children[0].children[0].children)
 
-            scene.children[0].children[0].children.forEach((obj:any)=>{
-                console.log(obj.material.roughness)
-                obj.material.roughness = 1.;
-            })
-            
-        },[])
-        return <primitive object={scene} {...props} />
-    }
 
     function Mirror({ ...props }) {
         const mirror = useGLTF('./mirror_b.glb')
@@ -147,18 +136,29 @@ const LTCTexturedLightDemo = () =>{
         auto_rotate:{
             value:true,
         },
-
     }) as {
         auto_rotate:boolean,
     }
 
+
     // *** Object Material Properties
-    const {floor_roughness,dragon_roughness} = useControls('Object Material',{
+    const {model_roughness,dragon_roughness} = useControls('Object Material',{
   
-        floor_roughness:{
-            value:0.2,
+        model_roughness:{
+            value:1.,
             min:0.0,
             max:10.0,
+
+            onChange:(v:any)=>{
+                if(roomRef.current){
+                    roomRef.current.traverse((obj:any)=>{
+
+                        if(obj.isMesh){
+                            obj.material.roughness = v;
+                        }
+                    })
+                }
+            }
         },
         dragon_roughness:{
             value:0.5,
@@ -177,12 +177,12 @@ const LTCTexturedLightDemo = () =>{
             }
         }
     }) as {
-        floor_roughness:number,
+        model_roughness:number,
         dragon_roughness:number,
     }
 
     // *** Video1 AreaLight Properties
-    const {position0,rotation0,color0,intensity0,width0,height0} = useControls('Video1 LTC AreaLight',{
+    const {position0,rotation0,color0,intensity0,width0,height0,addtionalRoughness0,isDoubleSide0,isClipless0} = useControls('Video1 LTC AreaLight',{
         position0:{
             value:[0,2.5,-9],
             label:'Position',
@@ -218,6 +218,21 @@ const LTCTexturedLightDemo = () =>{
             step:0.01,
             label:'Height',
         },
+        addtionalRoughness0:{
+            value:0.0,
+            min:0.0,
+            max:1.0,
+            step:0.01,
+            label:'Addtional Roughness',
+        },
+        isDoubleSide0:{
+            value:true,
+            label:'Double Side',
+        },
+        isClipless0:{
+            value:false,
+            label:'Clipless Approximation',
+        }
     }) as {
         position0:[number,number,number],
         rotation0:[number,number,number],
@@ -225,10 +240,13 @@ const LTCTexturedLightDemo = () =>{
         intensity0:number,
         width0:number,
         height0:number,
+        addtionalRoughness0:number,
+        isDoubleSide0:boolean,
+        isClipless0:boolean,
     }
 
     // *** Image AreaLight Properties
-    const {position1,rotation1,color1,intensity1,width1,height1} = useControls('Image LTC AreaLight',{
+    const {position1,rotation1,color1,intensity1,width1,height1,addtionalRoughness1,isDoubleSide1,isClipless1} = useControls('Image LTC AreaLight',{
         position1:{
             value:[8,2.5,0],
             label:'Position',
@@ -264,6 +282,21 @@ const LTCTexturedLightDemo = () =>{
             step:0.01,
             label:'Height',
         },
+        addtionalRoughness1:{
+            value:0.0,
+            min:0.0,
+            max:1.0,
+            step:0.01,
+            label:'Addtional Roughness',
+        },
+        isDoubleSide1:{
+            value:true,
+            label:'Double Side',
+        },
+        isClipless1:{
+            value:false,
+            label:'Clipless Approximation',
+        }
     }) as {
         position1:[number,number,number],
         rotation1:[number,number,number],
@@ -271,10 +304,13 @@ const LTCTexturedLightDemo = () =>{
         intensity1:number,
         width1:number,
         height1:number,
+        addtionalRoughness1:number,
+        isDoubleSide1:boolean,
+        isClipless1:boolean,
     }
 
     // *** Color AreaLight Properties
-    const {position2,rotation2,color2,intensity2,width2,height2} = useControls('Color LTC AreaLight',{
+    const {position2,rotation2,color2,intensity2,width2,height2,addtionalRoughness2,isDoubleSide2,isClipless2} = useControls('Color LTC AreaLight',{
 
         position2:{
             value:[-8,2.5,0],
@@ -311,6 +347,21 @@ const LTCTexturedLightDemo = () =>{
             step:0.01,
             label:'Height',
         },
+        addtionalRoughness2:{
+            value:0.0,
+            min:0.0,
+            max:1.0,
+            step:0.01,
+            label:'Addtional Roughness',
+        },
+        isDoubleSide2:{
+            value:true,
+            label:'Double Side',
+        },
+        isClipless2:{
+            value:false,
+            label:'Clipless Approximation',
+        }
     }) as {
         position2:[number,number,number],
         rotation2:[number,number,number],
@@ -318,6 +369,9 @@ const LTCTexturedLightDemo = () =>{
         intensity2:number,
         width2:number,
         height2:number,
+        addtionalRoughness2:number,
+        isDoubleSide2:boolean,
+        isClipless2:boolean,
     }
 
     // *** Video2 AreaLight Properties
@@ -409,10 +463,11 @@ const LTCTexturedLightDemo = () =>{
                 width={width0}
                 height={height0}
                 intensity={intensity0}
+                addtionalRoughness={addtionalRoughness0}
                 texture={vid_tex1}
                 blurSize={64}
-                doubleSide={true}
-                clipless={false}
+                doubleSide={isDoubleSide0}
+                clipless={isClipless0}
             ></LTCAreaLight>
 
             <LTCAreaLight
@@ -424,10 +479,11 @@ const LTCTexturedLightDemo = () =>{
                 width={width1}
                 height={height1}
                 intensity={intensity1}
+                addtionalRoughness={addtionalRoughness1}
                 texture={img_tex}
                 blurSize={64}
-                doubleSide={true}
-                clipless={false}
+                doubleSide={isDoubleSide1}
+                clipless={isClipless1}
             ></LTCAreaLight>
 
             <LTCAreaLight
@@ -439,10 +495,11 @@ const LTCTexturedLightDemo = () =>{
                 width={width2}
                 height={height2}
                 intensity={intensity2}
+                addtionalRoughness={addtionalRoughness2}
                 texture={null}
                 blurSize={64}
-                doubleSide={true}
-                clipless={false}
+                doubleSide={isDoubleSide2}
+                clipless={isClipless2}
             ></LTCAreaLight>
 
             {/* <LTCAreaLight
@@ -463,8 +520,10 @@ const LTCTexturedLightDemo = () =>{
             {/* 3D Objects */}
             
             {isControlEnabled && <TransformControls mode="translate" enabled={isControlEnabled} object={dragonRef.current}/>}
-            <Hall position={position4} scale={scale4} rotation={rotation4}/>
 
+            <group dispose={null}>
+            <primitive ref={roomRef} object={scene} position={position4} scale={scale4} rotation={rotation4} />
+            </group>
             <Mirror position={[0,-8.,9]} scale={[8.0,8.0,8.0]} rotation={[0,-Math.PI,0]}/>
             <mesh ref={dragonRef} 
                     position={[0,0,0]} 

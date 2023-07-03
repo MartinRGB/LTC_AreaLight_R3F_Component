@@ -35,6 +35,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
         width={width}
         height={height}
         intensity={intensity} // lightIntensity
+        addtionalRoughness={roughness} // this LTCAreaLight's roughness effect
         texture={null} // Image Texture | Video Texture | Null(Only color works)
         blurSize={64} // 64' means 64 x 64 FBO used for KawaseBlur
         doubleSide={true} // is enable 'DoubleSide' or not
@@ -44,15 +45,9 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
 </LTCAreaLightProxy>
 ```
 
-3.Props that can be modified at runtime
+3.Props that cannot be modified at runtime
 
-- isEnableHelper
-- position
-- rotation
-- color
-- width
-- height
-- intensity
+- blurSize
 
 ## Core ideas
 
@@ -62,6 +57,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
       - isDoubleSide
       - isClipless
       - rectAreaLightTexture (To improve performance, the texture is blurred in advance using DualKawaseBlur,and the FBO size can be set)
+      - ...
  2. In 'UseFrame',Continuous Blur Material with DualKawaseBlur
  3. Create a Plane Mesh to display the image or video texture as LightHelper.
 
@@ -72,9 +68,11 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
      - isDoubleSide
      - isClipless
      - rectAreaLightTexture 
- 3. Traverse all objects in the scene, and find the 'Mesh' object,
+     - ...
+ 3. Traverse all objects in the scene, and find the 'Mesh' object (in useEffect)
      - add these properties(in step 2) as uniforms into them:
      - modify shaders in onBeforeCompile
+ 4. In 'useFrame',update ref array object, then update the uniforms of the 'Mesh' object(by updating userData.shader.uniforms)
 
 ### What has been changed in shaderChunk
  The three main shaders in Three.js have been modified"
@@ -89,6 +87,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
       uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
       uniform bool isCliplesses[ NUM_RECT_AREA_LIGHTS ];
       uniform bool isDoubleSides[ NUM_RECT_AREA_LIGHTS ];
+      ...
     ```
 
  2. In `lights_fragment_begin`, add these uniforms into the 'rectAreaLight' function:

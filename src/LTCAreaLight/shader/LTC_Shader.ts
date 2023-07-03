@@ -876,11 +876,9 @@ export const RECT_AREALIGHT_HACK = `
 
 // *************** HACK THE RECT AREA LIGHT ***************
 
-uniform sampler2D ltc_tex;
-
 #if NUM_RECT_AREA_LIGHTS > 0
 
-	void RE_Direct_RectArea_Physical( const in RectAreaLight rectAreaLight, const in GeometricContext geometry, const in PhysicalMaterial material,const in sampler2D rectAreaLightTex,const in bool enableRectAreaLightTexture,const in bool doubleSide,const in bool clipless,inout ReflectedLight reflectedLight ) {
+	void RE_Direct_RectArea_Physical( const in RectAreaLight rectAreaLight, const in GeometricContext geometry, const in PhysicalMaterial material,const in sampler2D rectAreaLightTex,const in bool enableRectAreaLightTexture,const in bool doubleSide,const in bool clipless,const in float addtionalRoughness,inout ReflectedLight reflectedLight ) {
 
 		vec3 normal = geometry.normal;
 		vec3 viewDir = geometry.viewDir;
@@ -903,12 +901,12 @@ uniform sampler2D ltc_tex;
         vec4 mapCol;
         float m_roughness;
 
-        m_roughness = roughness ;
+        m_roughness = roughness + addtionalRoughness;
 
         #ifdef USE_MAP
             mapCol = texture2D( map, vMapUv );
             m_roughness = (1. - (mapCol.r + mapCol.g + mapCol.b)/3.) + normal.z ;
-            m_roughness *= roughness;
+            m_roughness *= (roughness + addtionalRoughness);
         #endif
 
         
@@ -1238,6 +1236,7 @@ float getSpotAttenuation( const in float coneCosine, const in float penumbraCosi
 	uniform bool enableRectAreaLightTextures[ NUM_RECT_AREA_LIGHTS ];
 	uniform bool isCliplesses[ NUM_RECT_AREA_LIGHTS ];
 	uniform bool isDoubleSides[ NUM_RECT_AREA_LIGHTS ];
+	uniform float addtionalRoughnesses[ NUM_RECT_AREA_LIGHTS ];
 
 #endif
 
@@ -1419,7 +1418,7 @@ IncidentLight directLight;
 
 		rectAreaLight = rectAreaLights[ i ];
         // *** Hack the RectAreaLight Textures ***
-		RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ],enableRectAreaLightTextures[i],isDoubleSides[i],isCliplesses[i],reflectedLight );
+		RE_Direct_RectArea( rectAreaLight, geometry, material, rectAreaLightTextures[ i ],enableRectAreaLightTextures[i],isDoubleSides[i],isCliplesses[i], addtionalRoughnesses[i],reflectedLight );
 
 	}
 	#pragma unroll_loop_end
