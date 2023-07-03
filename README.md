@@ -74,6 +74,7 @@ import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
      - modify shaders in onBeforeCompile
  4. In 'useFrame',update ref array object, then update the uniforms of the 'Mesh' object(by updating userData.shader.uniforms)
 
+
 ### What has been changed in shaderChunk
  The three main shaders in Three.js have been modified"
  
