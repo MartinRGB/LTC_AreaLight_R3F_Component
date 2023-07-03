@@ -6,7 +6,12 @@ import * as THREE from 'three'
 import { Perf } from "r3f-perf";
 import * as React from "react";
 import { LTCAreaLight,LTCAreaLightProxy } from "@/LTCAreaLight/LTCAreaLight";
+import { Html, useProgress } from '@react-three/drei'
 
+const Loader = () => {
+  const { progress } = useProgress()
+  return <Html center>{progress} % loaded</Html>
+}
 
 const LTCTexturedLightDemo = () =>{
 
@@ -488,10 +493,12 @@ export const Effect = (props:any) =>{
             camera={{ position: [0, 5, 30], fov: 50, near: 0.1, far: 1000 }}
             className={props.className} 
             style={{...props.style}}>
-            <Perf style={{position:'absolute',top:'10px',left:'10px',width:'360px',borderRadius:'10px'}}/>
-            <ambientLight intensity={0.015}></ambientLight>
-            <color attach="background" args={['#000000']} />
-            <LTCTexturedLightDemo/>
+            <Suspense fallback={<Loader />}>
+                <Perf style={{position:'absolute',top:'10px',left:'10px',width:'360px',borderRadius:'10px'}}/>
+                <ambientLight intensity={0.015}></ambientLight>
+                <color attach="background" args={['#000000']} />
+                <LTCTexturedLightDemo/>
+            </Suspense>
           </Canvas>
       </>
   
